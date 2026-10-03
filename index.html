@@ -27,18 +27,17 @@
   .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
 
   /*
-    Arquitectura: una sola cuadrícula (CSS Grid) de 3 columnas para TODO el
-    track. La columna central tiene ancho fijo y es la MISMA en cada
-    renglón — eso es lo único que garantiza que Bunny, el hueco de la
-    cadena, el hueco del muro y la zanahoria queden perfectamente alineados,
-    sin medir nada por JavaScript. Las columnas laterales son simple
-    decorado — relleno largo y fijo, nunca medido, nunca calculado.
+    Grid de 3 columnas. La columna central es siempre la misma celda de
+    ancho fijo en cada renglón — eso alinea todo sin medir nada.
+    Bunny NO se mueve con transform/píxeles: se mueve de celda a celda,
+    literalmente cambiando de contenedor en el DOM. "Arrastrar" solo decide
+    A QUÉ celda saltar, nunca calcula una posición continua.
   */
   #track {
     position: relative;
     display: grid;
     grid-template-columns: 1fr 4.5rem 1fr;
-    row-gap: 1.6rem;
+    row-gap: 3rem;
     align-items: center;
     width: 100%;
     overflow: hidden;
@@ -58,6 +57,7 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    min-height: 4.5rem;
   }
 
   .barrier-fill {
@@ -76,10 +76,10 @@
     cursor: grab;
     user-select: none;
     touch-action: none;
-    z-index: 5;
     filter: drop-shadow(0 3px 4px rgba(0,0,0,0.15));
+    transition: opacity .2s ease;
   }
-  #bunny.dragging { cursor: grabbing; }
+  #bunny.dragging { cursor: grabbing; opacity: 0.85; }
 
   #zone-end { font-size: 3rem; }
 
@@ -98,9 +98,9 @@
   <div id="loading" class="loading">Checking Bunny's credential…</div>
 
   <div id="track" style="display:none">
-    <!-- renglón 1: Bunny -->
+    <!-- renglón 1: inicio (Bunny vive aquí al cargar) -->
     <div class="side left"></div>
-    <div class="center-cell" id="zone-start"><span id="bunny">🐇</span></div>
+    <div class="center-cell" id="zone-0"><span id="bunny">🐇</span></div>
     <div class="side right"></div>
 
     <!-- renglón 2: cadena -->
@@ -110,16 +110,21 @@
     </div>
     <div class="side right" data-fill="🔗"></div>
 
-    <!-- renglón 3: muro -->
+    <!-- renglón 3: zona intermedia (entre cadena y muro) -->
+    <div class="side left"></div>
+    <div class="center-cell" id="zone-1"></div>
+    <div class="side right"></div>
+
+    <!-- renglón 4: muro -->
     <div class="side left" data-fill="🧱"></div>
     <div class="center-cell barrier-row" id="barrier-wall">
       <span class="barrier-fill" data-fill="🧱"></span>
     </div>
     <div class="side right" data-fill="🧱"></div>
 
-    <!-- renglón 4: zanahoria -->
+    <!-- renglón 5: zanahoria -->
     <div class="side left"></div>
-    <div class="center-cell" id="zone-end">🥕</div>
+    <div class="center-cell" id="zone-2">🥕</div>
     <div class="side right"></div>
   </div>
 
@@ -144,7 +149,7 @@
     import { verifyAgent, setRegistryKeys } from 'https://esm.sh/@aria-registry/verify@1.1.0';
 
     const BUNNY_ORIGIN = 'https://thebunny.bar';
-    const REPEAT = 120; // relleno fijo y generoso — no se mide nada, no hay nada que desalinear
+    const REPEAT = 120;
 
     document.querySelectorAll('[data-fill]').forEach((el) => {
       el.textContent = el.dataset.fill.repeat(REPEAT);
@@ -179,69 +184,73 @@
       document.getElementById('status-text').textContent = text;
     }
 
-    // --- Arrastre: SOLO vertical (translateY), la posición horizontal de
-    // Bunny ya la resuelve el grid, nunca JS. ---
-    const track = document.getElementById('track');
+    // ---------------------------------------------------------------
+    // Bunny vive en UNA de tres celdas: zones[0] (inicio), zones[1]
+    // (entre barreras), zones[2] (zanahoria). Nunca hay una posición
+    // intermedia en píxeles — solo "en cuál celda está ahora mismo".
+    // ---------------------------------------------------------------
     const bunny = document.getElementById('bunny');
+    const zones = [
+      document.getElementById('zone-0'),
+      document.getElementById('zone-1'),
+      document.getElementById('zone-2'),
+    ];
+
     const chainRow = document.getElementById('barrier-chain');
     const wallRow = document.getElementById('barrier-wall');
-    const zoneStart = document.getElementById('zone-start');
-    const zoneEnd = document.getElementById('zone-end');
 
+    let currentZone = 0;
     let chainOpen = false;
     let wallOpen = false;
 
-    // Distancia vertical, relativa a la posición natural de Bunny (renglón 1).
-    function offsetTo(targetEl) {
-      return targetEl.getBoundingClientRect().top - zoneStart.getBoundingClientRect().top;
+    function maxAllowedZone() {
+      if (!chainOpen) return 0;
+      if (!wallOpen) return 1;
+      return 2;
     }
 
-    function clampLimit() {
-      if (!chainOpen) return offsetTo(chainRow);
-      if (!wallOpen) return offsetTo(wallRow);
-      return offsetTo(zoneEnd);
+    function moveBunnyTo(zoneIndex) {
+      currentZone = zoneIndex;
+      zones[zoneIndex].appendChild(bunny);
     }
 
-    function placeBunnyAt(offsetY) {
-      bunny.style.transform = `translateY(${offsetY}px)`;
-    }
-
-    let currentOffset = 0;
+    // Arrastre: solo cuenta CUÁNTO te moviste desde el último paso. Cruzar
+    // un umbral (p. ej. 70px) intenta avanzar o retroceder UNA celda — y
+    // solo avanza si esa celda está permitida. No hay posición continua
+    // que recordar ni clampear.
+    const STEP_THRESHOLD = 70;
     let dragging = false;
-    let dragStartClientY = 0;
-    let dragStartOffset = 0;
+    let dragAccum = 0;
+    let dragLastY = 0;
 
     bunny.addEventListener('pointerdown', (e) => {
       dragging = true;
       bunny.classList.add('dragging');
       bunny.setPointerCapture(e.pointerId);
-      dragStartClientY = e.clientY;
-      dragStartOffset = currentOffset;
+      dragLastY = e.clientY;
+      dragAccum = 0;
     });
     bunny.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      const delta = e.clientY - dragStartClientY;
-      const max = clampLimit();
-      currentOffset = Math.max(0, Math.min(max, dragStartOffset + delta));
-      placeBunnyAt(currentOffset);
+      const delta = e.clientY - dragLastY;
+      dragLastY = e.clientY;
+      dragAccum += delta;
+
+      if (dragAccum >= STEP_THRESHOLD) {
+        dragAccum = 0;
+        const next = currentZone + 1;
+        if (next <= maxAllowedZone()) moveBunnyTo(next);
+        // si no está permitido, simplemente no pasa nada — Bunny se queda
+      } else if (dragAccum <= -STEP_THRESHOLD) {
+        dragAccum = 0;
+        const prev = currentZone - 1;
+        if (prev >= 0) moveBunnyTo(prev);
+      }
     });
     function endDrag() {
-      if (!dragging) return;
       dragging = false;
       bunny.classList.remove('dragging');
-      const candidates = [0];
-      if (chainOpen) candidates.push((offsetTo(chainRow) + offsetTo(wallRow)) / 2);
-      if (wallOpen) candidates.push(offsetTo(zoneEnd));
-      let best = candidates[0];
-      let bestDist = Math.abs(currentOffset - best);
-      for (const c of candidates) {
-        const d = Math.abs(currentOffset - c);
-        if (d < bestDist) { best = c; bestDist = d; }
-      }
-      currentOffset = best;
-      bunny.style.transition = 'transform .35s cubic-bezier(.34,1.56,.64,1)';
-      placeBunnyAt(currentOffset);
-      setTimeout(() => { bunny.style.transition = ''; }, 350);
+      dragAccum = 0;
     }
     bunny.addEventListener('pointerup', endDrag);
     bunny.addEventListener('pointercancel', endDrag);
@@ -260,7 +269,7 @@
       const credParam = params.get('credential');
 
       document.getElementById('loading').style.display = 'none';
-      track.style.display = 'grid';
+      document.getElementById('track').style.display = 'grid';
       document.getElementById('status-text').style.display = 'block';
 
       if (!credParam) {
