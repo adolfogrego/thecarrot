@@ -133,7 +133,7 @@
 
     // Llenado real: mide el glifo y calcula cuántas copias hacen falta para
     // cubrir el ancho visible, en vez de un número fijo adivinado.
-    function fillHalf(el, glyph) {
+    function fillHalf(el, glyph, targetWidthPx) {
       const probe = document.createElement('span');
       probe.textContent = glyph;
       probe.style.position = 'fixed';
@@ -143,8 +143,9 @@
       document.body.appendChild(probe);
       const glyphWidth = Math.max(probe.getBoundingClientRect().width, 4);
       document.body.removeChild(probe);
-      const targetWidth = window.innerWidth / 2; // cada mitad cubre medio viewport
-      const count = Math.ceil(targetWidth / glyphWidth) + 15; // margen generoso, nunca falta
+      // Mismo ancho que se le asignó al elemento vía style.width — nunca un
+      // supuesto aparte — con margen de sobra para que nunca falte cobertura.
+      const count = Math.ceil(targetWidthPx / glyphWidth) + 15;
       el.textContent = glyph.repeat(count);
     }
     document.getElementById('policy-toggle').addEventListener('click', () => {
@@ -191,19 +192,21 @@
       return zoneStart.getBoundingClientRect().left + zoneStart.offsetWidth / 2;
     }
 
-    function positionSplit(barrierEl) {
+    function positionSplit(barrierEl, glyph) {
       const x = bunnyPathX();
+      const leftWidth = x;
+      const rightWidth = window.innerWidth - x;
       const halves = barrierEl.querySelectorAll('.half');
-      halves[0].style.width = x + 'px';                       // mitad izquierda: todo lo que hay a la izquierda de Bunny
-      halves[1].style.width = (window.innerWidth - x) + 'px';  // mitad derecha: el resto de la pantalla
+      halves[0].style.width = leftWidth + 'px';
+      halves[1].style.width = rightWidth + 'px';
+      // el mismo número exacto, pasado directo — nunca recalculado aparte
+      fillHalf(halves[0], glyph, leftWidth);
+      fillHalf(halves[1], glyph, rightWidth);
     }
 
     function fillAllBarriers() {
-      [chainBarrier, wallBarrier].forEach((barrierEl) => {
-        positionSplit(barrierEl);
-        const glyph = barrierEl === chainBarrier ? '🔗' : '🧱';
-        barrierEl.querySelectorAll('.half').forEach((el) => fillHalf(el, glyph));
-      });
+      positionSplit(chainBarrier, '🔗');
+      positionSplit(wallBarrier, '🧱');
     }
     requestAnimationFrame(fillAllBarriers);
     let resizeTimer;
