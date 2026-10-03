@@ -52,7 +52,7 @@
     overflow: hidden;
   }
   .barrier .half {
-    width: 50%;
+    /* el ancho ya NO es 50% fijo — lo calcula JS a partir de dónde está Bunny */
     overflow: hidden;
     white-space: nowrap;
     font-size: 1.4rem;
@@ -131,12 +131,22 @@
 
     const BUNNY_ORIGIN = 'https://thebunny.bar';
 
-    // Llenar cada mitad de barrera con suficientes eslabones/ladrillos para
-    // cubrir cualquier ancho de pantalla razonable, pegados sin espacio.
-    const REPEAT = 60;
-    document.querySelectorAll('#barrier-chain .half').forEach((el) => { el.textContent = '🔗'.repeat(REPEAT); });
-    document.querySelectorAll('#barrier-wall .half').forEach((el) => { el.textContent = '🧱'.repeat(REPEAT); });
-
+    // Llenado real: mide el glifo y calcula cuántas copias hacen falta para
+    // cubrir el ancho visible, en vez de un número fijo adivinado.
+    function fillHalf(el, glyph) {
+      const probe = document.createElement('span');
+      probe.textContent = glyph;
+      probe.style.position = 'fixed';
+      probe.style.visibility = 'hidden';
+      probe.style.fontSize = getComputedStyle(el).fontSize;
+      probe.style.letterSpacing = getComputedStyle(el).letterSpacing;
+      document.body.appendChild(probe);
+      const glyphWidth = Math.max(probe.getBoundingClientRect().width, 4);
+      document.body.removeChild(probe);
+      const targetWidth = window.innerWidth / 2; // cada mitad cubre medio viewport
+      const count = Math.ceil(targetWidth / glyphWidth) + 15; // margen generoso, nunca falta
+      el.textContent = glyph.repeat(count);
+    }
     document.getElementById('policy-toggle').addEventListener('click', () => {
       const box = document.getElementById('policy-box');
       box.style.display = box.style.display === 'block' ? 'none' : 'block';
@@ -173,6 +183,34 @@
     const wallBarrier = document.getElementById('barrier-wall');
     const zoneStart = document.getElementById('zone-start');
     const zoneEnd = document.getElementById('zone-end');
+
+    // El punto de corte de CADA barrera se mide, nunca se adivina: es
+    // exactamente el centro horizontal por donde camina Bunny — medido con
+    // getBoundingClientRect, no un 50% ni un 50vw asumido en CSS.
+    function bunnyPathX() {
+      return zoneStart.getBoundingClientRect().left + zoneStart.offsetWidth / 2;
+    }
+
+    function positionSplit(barrierEl) {
+      const x = bunnyPathX();
+      const halves = barrierEl.querySelectorAll('.half');
+      halves[0].style.width = x + 'px';                       // mitad izquierda: todo lo que hay a la izquierda de Bunny
+      halves[1].style.width = (window.innerWidth - x) + 'px';  // mitad derecha: el resto de la pantalla
+    }
+
+    function fillAllBarriers() {
+      [chainBarrier, wallBarrier].forEach((barrierEl) => {
+        positionSplit(barrierEl);
+        const glyph = barrierEl === chainBarrier ? '🔗' : '🧱';
+        barrierEl.querySelectorAll('.half').forEach((el) => fillHalf(el, glyph));
+      });
+    }
+    requestAnimationFrame(fillAllBarriers);
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(fillAllBarriers, 200);
+    });
 
     let chainOpen = false;
     let wallOpen = false;
