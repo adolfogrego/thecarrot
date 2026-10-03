@@ -20,26 +20,78 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
     display: flex; flex-direction: column; align-items: center;
-    padding: 2.5rem 1.25rem 3rem;
+    padding: 2rem 1.25rem 2.5rem;
+    overscroll-behavior: none;
   }
-  .brand { font-size: 0.95rem; color: #6E8A5E; margin-bottom: 1.6rem; }
-  .stage {
-    width: 100%; max-width: 420px;
-    display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+  .brand { font-size: 0.95rem; color: #6E8A5E; margin-bottom: 1.2rem; }
+  .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
+
+  /* --- La pista: vertical en desktop, horizontal en móvil --- */
+  #track {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 420px;
+    min-height: 520px;
+    touch-action: none;
   }
-  .obstacle { font-size: 3rem; transition: opacity .5s ease, transform .5s ease; }
-  .obstacle.gone { opacity: 0.15; transform: scale(0.85); }
-  .row { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
-  .status-text { font-size: 0.95rem; text-align: center; max-width: 30ch; min-height: 2.6em; }
-  .status-text.playful { font-weight: 600; }
-  #bunny { font-size: 3.4rem; }
-  #carrot { font-size: 3rem; }
-  .connector { font-size: 1.3rem; color: #A9BE9A; }
-  .links { display: flex; gap: 1rem; margin-top: 2rem; font-family: var(--mono); font-size: 0.78rem; }
+  @media (max-width: 640px) {
+    #track {
+      flex-direction: row;
+      min-height: 0;
+      min-width: 100%;
+      height: 170px;
+      overflow-x: auto;
+    }
+  }
+
+  .zone { display: flex; align-items: center; justify-content: center; font-size: 3rem; flex-shrink: 0; }
+  #zone-start, #zone-end { width: 4.5rem; height: 4.5rem; }
+
+  .barrier {
+    display: flex;
+    flex-direction: row;
+    gap: 0.35rem;
+    font-size: 1.6rem;
+    transition: gap .5s ease;
+  }
+  @media (max-width: 640px) {
+    .barrier { flex-direction: column; }
+  }
+  .barrier .half { display: flex; flex-direction: row; gap: 0.35rem; transition: transform .6s cubic-bezier(.34,1.56,.64,1), opacity .5s ease; }
+  @media (max-width: 640px) {
+    .barrier .half { flex-direction: column; }
+  }
+  .barrier.open .half.a { transform: translate(-28px, -14px) rotate(-12deg); opacity: 0.25; }
+  .barrier.open .half.b { transform: translate(28px, 14px) rotate(12deg); opacity: 0.25; }
+  @media (max-width: 640px) {
+    .barrier.open .half.a { transform: translate(-14px, -28px) rotate(-12deg); opacity: 0.25; }
+    .barrier.open .half.b { transform: translate(14px, 28px) rotate(12deg); opacity: 0.25; }
+  }
+
+  #bunny {
+    position: absolute;
+    font-size: 3.2rem;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    z-index: 5;
+    transition: left .35s cubic-bezier(.34,1.56,.64,1), top .35s cubic-bezier(.34,1.56,.64,1);
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,0.15));
+  }
+  #bunny.dragging { cursor: grabbing; transition: none; }
+
+  .status-text { font-size: 0.95rem; text-align: center; max-width: 30ch; min-height: 2.6em; margin-top: 0.4rem; font-weight: 600; }
+  .hint { font-family: var(--mono); font-size: 0.72rem; color: #8BA27C; margin-top: -0.6rem; }
+
+  .links { display: flex; gap: 1rem; margin-top: 1.4rem; font-family: var(--mono); font-size: 0.78rem; }
   .links a, .links button { color: var(--accent); background: none; border: none; cursor: pointer; text-decoration: underline; font-family: inherit; font-size: inherit; padding: 0; }
   #policy-box, #tech-box { display: none; width: 100%; max-width: 420px; margin-top: 1rem; }
   #policy-box pre, #tech-box pre { font-size: 0.72rem; background: #E9F0E1; border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-  .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -47,18 +99,28 @@
 
   <div id="loading" class="loading">Checking Bunny's credential…</div>
 
-  <div class="stage" id="stage" style="display:none">
-    <div class="row">
-      <div id="bunny">🐇</div>
-      <div id="chain-emoji" class="obstacle">🔗</div>
+  <div id="track" style="display:none">
+    <div class="zone" id="zone-start">
+      <span id="bunny">🐇</span>
     </div>
-    <div class="connector">↓</div>
-    <div class="row">
-      <div id="wall-emoji" class="obstacle">🧱</div>
-      <div id="carrot">🥕</div>
+
+    <div class="barrier" id="barrier-chain">
+      <div class="half a"><span>🔗</span><span>🔗</span><span>🔗</span></div>
+      <div class="half b"><span>🔗</span><span>🔗</span><span>🔗</span></div>
     </div>
-    <p class="status-text playful" id="status-text">Nobody's here yet.</p>
+
+    <div class="zone" id="zone-mid" style="font-size:1rem; min-height:1px; min-width:1px;"></div>
+
+    <div class="barrier" id="barrier-wall">
+      <div class="half a"><span>🧱</span><span>🧱</span><span>🧱</span></div>
+      <div class="half b"><span>🧱</span><span>🧱</span><span>🧱</span></div>
+    </div>
+
+    <div class="zone" id="zone-end">🥕</div>
   </div>
+
+  <p class="status-text" id="status-text" style="display:none"></p>
+  <p class="hint" id="hint" style="display:none">drag 🐇 forward</p>
 
   <div class="links">
     <button id="policy-toggle">view policy</button>
@@ -108,10 +170,129 @@
       document.getElementById('status-text').textContent = text;
     }
 
+    // --- Lógica de arrastre + barreras ---
+    const track = document.getElementById('track');
+    const bunny = document.getElementById('bunny');
+    const chainBarrier = document.getElementById('barrier-chain');
+    const wallBarrier = document.getElementById('barrier-wall');
+    const zoneStart = document.getElementById('zone-start');
+    const zoneEnd = document.getElementById('zone-end');
+
+    let chainOpen = false;
+    let wallOpen = false;
+    const axisIsVertical = () => window.matchMedia('(min-width: 641px)').matches;
+
+    function clampLimit() {
+      const trackRect = track.getBoundingClientRect();
+      if (!chainOpen) {
+        const r = chainBarrier.getBoundingClientRect();
+        return axisIsVertical() ? r.top - trackRect.top : r.left - trackRect.left;
+      }
+      if (!wallOpen) {
+        const r = wallBarrier.getBoundingClientRect();
+        return axisIsVertical() ? r.top - trackRect.top : r.left - trackRect.left;
+      }
+      const r = zoneEnd.getBoundingClientRect();
+      return axisIsVertical()
+        ? (r.top - trackRect.top + r.height / 2)
+        : (r.left - trackRect.left + r.width / 2);
+    }
+
+    function placeBunnyAt(pos) {
+      const trackRect = track.getBoundingClientRect();
+      const sr = zoneStart.getBoundingClientRect();
+      if (axisIsVertical()) {
+        bunny.style.left = (sr.left - trackRect.left + sr.width / 2 - bunny.offsetWidth / 2) + 'px';
+        bunny.style.top = (pos - bunny.offsetHeight / 2) + 'px';
+      } else {
+        bunny.style.top = (sr.top - trackRect.top + sr.height / 2 - bunny.offsetHeight / 2) + 'px';
+        bunny.style.left = (pos - bunny.offsetWidth / 2) + 'px';
+      }
+    }
+
+    function initialBunnyPos() {
+      const trackRect = track.getBoundingClientRect();
+      const r = zoneStart.getBoundingClientRect();
+      return axisIsVertical()
+        ? (r.top - trackRect.top + r.height / 2)
+        : (r.left - trackRect.left + r.width / 2);
+    }
+
+    let currentPos = 0;
+    let dragging = false;
+    let dragStartClient = 0;
+    let dragStartPos = 0;
+
+    function pointerAxisValue(e) {
+      return axisIsVertical() ? e.clientY : e.clientX;
+    }
+
+    bunny.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      bunny.classList.add('dragging');
+      bunny.setPointerCapture(e.pointerId);
+      dragStartClient = pointerAxisValue(e);
+      dragStartPos = currentPos;
+    });
+    bunny.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const delta = pointerAxisValue(e) - dragStartClient;
+      const min = 0;
+      const max = clampLimit();
+      let next = dragStartPos + delta;
+      next = Math.max(min, Math.min(max, next));
+      currentPos = next;
+      placeBunnyAt(currentPos);
+    });
+    function midpointPos() {
+      const trackRect = track.getBoundingClientRect();
+      const a = axisIsVertical()
+        ? chainBarrier.getBoundingClientRect().bottom
+        : chainBarrier.getBoundingClientRect().right;
+      const b = axisIsVertical()
+        ? wallBarrier.getBoundingClientRect().top
+        : wallBarrier.getBoundingClientRect().left;
+      const base = axisIsVertical() ? trackRect.top : trackRect.left;
+      return ((a - base) + (b - base)) / 2;
+    }
+    function endPos() {
+      const trackRect = track.getBoundingClientRect();
+      const r = zoneEnd.getBoundingClientRect();
+      return axisIsVertical()
+        ? (r.top - trackRect.top + r.height / 2)
+        : (r.left - trackRect.left + r.width / 2);
+    }
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      bunny.classList.remove('dragging');
+      const candidates = [initialBunnyPos()];
+      if (chainOpen) candidates.push(midpointPos());
+      if (wallOpen) candidates.push(endPos());
+      let best = candidates[0];
+      let bestDist = Math.abs(currentPos - best);
+      for (const c of candidates) {
+        const d = Math.abs(currentPos - c);
+        if (d < bestDist) { best = c; bestDist = d; }
+      }
+      currentPos = best;
+      placeBunnyAt(currentPos);
+    }
+    bunny.addEventListener('pointerup', endDrag);
+    bunny.addEventListener('pointercancel', endDrag);
+
+    window.addEventListener('resize', () => {
+      currentPos = initialBunnyPos();
+      placeBunnyAt(currentPos);
+    });
+
     function render({ chainDown, wallDown, tech }) {
-      document.getElementById('chain-emoji').classList.toggle('gone', chainDown);
-      document.getElementById('wall-emoji').classList.toggle('gone', wallDown);
+      chainOpen = chainDown;
+      wallOpen = wallDown;
+      if (chainDown) chainBarrier.classList.add('open');
+      if (wallDown) wallBarrier.classList.add('open');
       document.getElementById('tech-content').textContent = tech;
+      document.getElementById('hint').style.display = 'block';
     }
 
     async function main() {
@@ -119,7 +300,13 @@
       const credParam = params.get('credential');
 
       document.getElementById('loading').style.display = 'none';
-      document.getElementById('stage').style.display = 'flex';
+      track.style.display = 'flex';
+      document.getElementById('status-text').style.display = 'block';
+
+      requestAnimationFrame(() => {
+        currentPos = initialBunnyPos();
+        placeBunnyAt(currentPos);
+      });
 
       if (!credParam) {
         setStatus('🔗 Who goes there? Bunny can\'t prove it yet.');
@@ -136,8 +323,6 @@
         return;
       }
 
-      // Descubrimiento: resolvemos la identidad pública de thebunny.bar
-      // en vivo, sin caché, en cada intento.
       let identity;
       try {
         const res = await fetch(BUNNY_ORIGIN + '/.well-known/aria-identity.json', { cache: 'no-store' });
@@ -152,24 +337,23 @@
       const result = verifyAgent(credential);
 
       if (!result.valid) {
-        setStatus('🔗 Signature check failed — the cage stays shut.');
+        setStatus('🔗 Signature check failed — the chain stays shut.');
         render({ chainDown: false, wallDown: false, tech: 'Rejected — ' + result.reason });
         return;
       }
 
-      // Identidad pasó → cae la cadena, siempre, sin importar scope.
       const scopes = result.scopes || [];
       const canEat = scopes.includes('carrot:action:eat');
 
       if (!canEat) {
-        setStatus('🧱 Bunny\'s here — but hasn\'t earned dinner rights.');
+        setStatus('🧱 Bunny\'s through — but hasn\'t earned dinner rights.');
         render({
           chainDown: true,
           wallDown: false,
           tech: `Identity valid — did=${result.did}, trustLevel=${result.trustLevel}, scopes=[${scopes.join(', ')}]\nRejected — signature valid; declared scope does not include required "carrot:action:eat" per _aria-policy.thecarrot.rest`,
         });
       } else {
-        setStatus('🧱💥 Scope granted. Dinner is served.');
+        setStatus('🧱💥 Scope granted. Drag Bunny all the way home.');
         render({
           chainDown: true,
           wallDown: true,
