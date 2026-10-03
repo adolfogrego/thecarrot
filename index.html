@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>thecarrot.rest</title>
+<style>
+  :root {
+    --bg: #F2F6EC;
+    --ink: #1C2417;
+    --accent: #4C7A3D;
+    --line: #D8E4CB;
+    --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 2.5rem 1.25rem 3rem;
+  }
+  .brand { font-size: 0.95rem; color: #6E8A5E; margin-bottom: 1.6rem; }
+  .stage {
+    width: 100%; max-width: 420px;
+    display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+  }
+  .obstacle { font-size: 3rem; transition: opacity .5s ease, transform .5s ease; }
+  .obstacle.gone { opacity: 0.15; transform: scale(0.85); }
+  .row { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+  .status-text { font-size: 0.95rem; text-align: center; max-width: 30ch; min-height: 2.6em; }
+  .status-text.playful { font-weight: 600; }
+  #bunny { font-size: 3.4rem; }
+  #carrot { font-size: 3rem; }
+  .connector { font-size: 1.3rem; color: #A9BE9A; }
+  .links { display: flex; gap: 1rem; margin-top: 2rem; font-family: var(--mono); font-size: 0.78rem; }
+  .links a, .links button { color: var(--accent); background: none; border: none; cursor: pointer; text-decoration: underline; font-family: inherit; font-size: inherit; padding: 0; }
+  #policy-box, #tech-box { display: none; width: 100%; max-width: 420px; margin-top: 1rem; }
+  #policy-box pre, #tech-box pre { font-size: 0.72rem; background: #E9F0E1; border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+  <div class="brand">thecarrot.rest</div>
+
+  <div id="loading" class="loading">Checking Bunny's credential…</div>
+
+  <div class="stage" id="stage" style="display:none">
+    <div class="row">
+      <div id="bunny">🐇</div>
+      <div id="chain-emoji" class="obstacle">🔗</div>
+    </div>
+    <div class="connector">↓</div>
+    <div class="row">
+      <div id="wall-emoji" class="obstacle">🧱</div>
+      <div id="carrot">🥕</div>
+    </div>
+    <p class="status-text playful" id="status-text">Nobody's here yet.</p>
+  </div>
+
+  <div class="links">
+    <button id="policy-toggle">view policy</button>
+    <button id="tech-toggle">technical panel</button>
+  </div>
+
+  <div id="policy-box">
+    <pre>_aria-policy.thecarrot.rest TXT
+"v=ATP1; min=L0; req.reach=carrot:action:reach; req.eat=carrot:action:eat; fresh=3600; anchor=wellknown"</pre>
+  </div>
+
+  <div id="tech-box">
+    <pre id="tech-content">—</pre>
+  </div>
+
+  <script type="module">
+    import { verifyAgent, setRegistryKeys } from 'https://esm.sh/@aria-registry/verify@1.1.0';
+
+    const BUNNY_ORIGIN = 'https://thebunny.bar';
+
+    document.getElementById('policy-toggle').addEventListener('click', () => {
+      const box = document.getElementById('policy-box');
+      box.style.display = box.style.display === 'block' ? 'none' : 'block';
+    });
+    document.getElementById('tech-toggle').addEventListener('click', () => {
+      const box = document.getElementById('tech-box');
+      box.style.display = box.style.display === 'block' ? 'none' : 'block';
+    });
+
+    function hexToBytes(hex) {
+      const clean = hex.trim();
+      const bytes = new Uint8Array(clean.length / 2);
+      for (let i = 0; i < clean.length; i += 2) bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16);
+      return bytes;
+    }
+
+    function base64urlToJson(param) {
+      let base64 = param.replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4 !== 0) base64 += '=';
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
+
+    function setStatus(text) {
+      document.getElementById('status-text').textContent = text;
+    }
+
+    function render({ chainDown, wallDown, tech }) {
+      document.getElementById('chain-emoji').classList.toggle('gone', chainDown);
+      document.getElementById('wall-emoji').classList.toggle('gone', wallDown);
+      document.getElementById('tech-content').textContent = tech;
+    }
+
+    async function main() {
+      const params = new URLSearchParams(window.location.search);
+      const credParam = params.get('credential');
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('stage').style.display = 'flex';
+
+      if (!credParam) {
+        setStatus('🔗 Who goes there? Bunny can\'t prove it yet.');
+        render({ chainDown: false, wallDown: false, tech: 'No credential presented.' });
+        return;
+      }
+
+      let credential;
+      try {
+        credential = base64urlToJson(credParam);
+      } catch (e) {
+        setStatus('🔗 That link is malformed — Bunny stays put.');
+        render({ chainDown: false, wallDown: false, tech: 'Could not decode credential param: ' + e.message });
+        return;
+      }
+
+      // Descubrimiento: resolvemos la identidad pública de thebunny.bar
+      // en vivo, sin caché, en cada intento.
+      let identity;
+      try {
+        const res = await fetch(BUNNY_ORIGIN + '/.well-known/aria-identity.json', { cache: 'no-store' });
+        identity = await res.json();
+      } catch (e) {
+        setStatus('🔗 Could not reach thebunny.bar to check the key.');
+        render({ chainDown: false, wallDown: false, tech: 'Discovery fetch failed: ' + e.message });
+        return;
+      }
+
+      setRegistryKeys(hexToBytes(identity.pq), hexToBytes(identity.ed));
+      const result = verifyAgent(credential);
+
+      if (!result.valid) {
+        setStatus('🔗 Signature check failed — the cage stays shut.');
+        render({ chainDown: false, wallDown: false, tech: 'Rejected — ' + result.reason });
+        return;
+      }
+
+      // Identidad pasó → cae la cadena, siempre, sin importar scope.
+      const scopes = result.scopes || [];
+      const canEat = scopes.includes('carrot:action:eat');
+
+      if (!canEat) {
+        setStatus('🧱 Bunny\'s here — but hasn\'t earned dinner rights.');
+        render({
+          chainDown: true,
+          wallDown: false,
+          tech: `Identity valid — did=${result.did}, trustLevel=${result.trustLevel}, scopes=[${scopes.join(', ')}]\nRejected — signature valid; declared scope does not include required "carrot:action:eat" per _aria-policy.thecarrot.rest`,
+        });
+      } else {
+        setStatus('🧱💥 Scope granted. Dinner is served.');
+        render({
+          chainDown: true,
+          wallDown: true,
+          tech: `Identity valid — did=${result.did}, trustLevel=${result.trustLevel}, scopes=[${scopes.join(', ')}]\nAdmitted — signature valid; scope satisfies req.eat=carrot:action:eat`,
+        });
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
