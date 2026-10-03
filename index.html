@@ -22,64 +22,68 @@
     display: flex; flex-direction: column; align-items: center;
     padding: 2rem 0 2.5rem;
     overscroll-behavior: none;
-    overflow-x: hidden; /* las barreras se salen a 100vw a propósito */
   }
   .brand { font-size: 0.95rem; color: #6E8A5E; margin-bottom: 1.2rem; }
   .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
 
-  /* --- La pista: siempre vertical, sin lógica responsiva --- */
+  /*
+    Arquitectura: una sola cuadrícula (CSS Grid) de 3 columnas para TODO el
+    track. La columna central tiene ancho fijo y es la MISMA en cada
+    renglón — eso es lo único que garantiza que Bunny, el hueco de la
+    cadena, el hueco del muro y la zanahoria queden perfectamente alineados,
+    sin medir nada por JavaScript. Las columnas laterales son simple
+    decorado — relleno largo y fijo, nunca medido, nunca calculado.
+  */
   #track {
     position: relative;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 4.5rem 1fr;
+    row-gap: 1.6rem;
     align-items: center;
     width: 100%;
-    max-width: 420px;
-    min-height: 560px;
-  }
-
-  .zone { display: flex; align-items: center; justify-content: center; font-size: 3rem; flex-shrink: 0; height: 5rem; }
-
-  /* Barreras: cruzan TODA la pantalla, no solo la tarjeta centrada */
-  .barrier {
-    width: 100vw;
-    margin-left: calc(50% - 50vw);
-    height: 2.4rem;
-    margin-top: 1.6rem;
-    margin-bottom: 1.6rem;
-    display: flex;
-    flex-direction: row;
     overflow: hidden;
   }
-  .barrier .half {
-    /* el ancho ya NO es 50% fijo — lo calcula JS a partir de dónde está Bunny */
+
+  .side {
     overflow: hidden;
     white-space: nowrap;
     font-size: 1.4rem;
-    line-height: 2.4rem;
-    letter-spacing: -0.15em; /* pegados, sin separación visible */
-    transition: transform .7s cubic-bezier(.3,.9,.4,1), opacity .5s ease;
+    letter-spacing: -0.15em;
   }
-  .barrier .half.a { justify-content: flex-end; text-align: right; }
-  .barrier .half.b { justify-content: flex-start; text-align: left; }
-  .barrier.open .half.a { transform: translateX(-100%); opacity: 0.12; }
-  .barrier.open .half.b { transform: translateX(100%); opacity: 0.12; }
+  .side.left { text-align: right; }
+  .side.right { text-align: left; }
+
+  .center-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .barrier-fill {
+    font-size: 1.4rem;
+    letter-spacing: -0.15em;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+    text-align: center;
+    transition: opacity .6s ease;
+  }
+  .barrier-row.open .barrier-fill { opacity: 0.08; }
 
   #bunny {
-    position: absolute;
     font-size: 3.2rem;
     cursor: grab;
     user-select: none;
     touch-action: none;
     z-index: 5;
-    left: 50%;
-    transform: translateX(-50%);
-    transition: top .35s cubic-bezier(.34,1.56,.64,1);
     filter: drop-shadow(0 3px 4px rgba(0,0,0,0.15));
   }
-  #bunny.dragging { cursor: grabbing; transition: none; }
+  #bunny.dragging { cursor: grabbing; }
 
-  .status-text { font-size: 0.95rem; text-align: center; max-width: 30ch; min-height: 2.6em; margin-top: 0.4rem; font-weight: 600; }
+  #zone-end { font-size: 3rem; }
+
+  .status-text { font-size: 0.95rem; text-align: center; max-width: 30ch; min-height: 2.6em; margin-top: 1.4rem; font-weight: 600; }
   .hint { font-family: var(--mono); font-size: 0.72rem; color: #8BA27C; margin-top: -0.6rem; }
 
   .links { display: flex; gap: 1rem; margin-top: 1.4rem; font-family: var(--mono); font-size: 0.78rem; }
@@ -94,19 +98,29 @@
   <div id="loading" class="loading">Checking Bunny's credential…</div>
 
   <div id="track" style="display:none">
-    <div class="zone" id="zone-start">
-      <span id="bunny">🐇</span>
-    </div>
+    <!-- renglón 1: Bunny -->
+    <div class="side left"></div>
+    <div class="center-cell" id="zone-start"><span id="bunny">🐇</span></div>
+    <div class="side right"></div>
 
-    <div class="barrier" id="barrier-chain">
-      <span class="half a"></span><span class="half b"></span>
+    <!-- renglón 2: cadena -->
+    <div class="side left" data-fill="🔗"></div>
+    <div class="center-cell barrier-row" id="barrier-chain">
+      <span class="barrier-fill" data-fill="🔗"></span>
     </div>
+    <div class="side right" data-fill="🔗"></div>
 
-    <div class="barrier" id="barrier-wall">
-      <span class="half a"></span><span class="half b"></span>
+    <!-- renglón 3: muro -->
+    <div class="side left" data-fill="🧱"></div>
+    <div class="center-cell barrier-row" id="barrier-wall">
+      <span class="barrier-fill" data-fill="🧱"></span>
     </div>
+    <div class="side right" data-fill="🧱"></div>
 
-    <div class="zone" id="zone-end">🥕</div>
+    <!-- renglón 4: zanahoria -->
+    <div class="side left"></div>
+    <div class="center-cell" id="zone-end">🥕</div>
+    <div class="side right"></div>
   </div>
 
   <p class="status-text" id="status-text" style="display:none"></p>
@@ -130,24 +144,12 @@
     import { verifyAgent, setRegistryKeys } from 'https://esm.sh/@aria-registry/verify@1.1.0';
 
     const BUNNY_ORIGIN = 'https://thebunny.bar';
+    const REPEAT = 120; // relleno fijo y generoso — no se mide nada, no hay nada que desalinear
 
-    // Llenado real: mide el glifo y calcula cuántas copias hacen falta para
-    // cubrir el ancho visible, en vez de un número fijo adivinado.
-    function fillHalf(el, glyph, targetWidthPx) {
-      const probe = document.createElement('span');
-      probe.textContent = glyph;
-      probe.style.position = 'fixed';
-      probe.style.visibility = 'hidden';
-      probe.style.fontSize = getComputedStyle(el).fontSize;
-      probe.style.letterSpacing = getComputedStyle(el).letterSpacing;
-      document.body.appendChild(probe);
-      const glyphWidth = Math.max(probe.getBoundingClientRect().width, 4);
-      document.body.removeChild(probe);
-      // Mismo ancho que se le asignó al elemento vía style.width — nunca un
-      // supuesto aparte — con margen de sobra para que nunca falte cobertura.
-      const count = Math.ceil(targetWidthPx / glyphWidth) + 15;
-      el.textContent = glyph.repeat(count);
-    }
+    document.querySelectorAll('[data-fill]').forEach((el) => {
+      el.textContent = el.dataset.fill.repeat(REPEAT);
+    });
+
     document.getElementById('policy-toggle').addEventListener('click', () => {
       const box = document.getElementById('policy-box');
       box.style.display = box.style.display === 'block' ? 'none' : 'block';
@@ -177,125 +179,78 @@
       document.getElementById('status-text').textContent = text;
     }
 
-    // --- Arrastre vertical únicamente — sin lógica responsiva ---
+    // --- Arrastre: SOLO vertical (translateY), la posición horizontal de
+    // Bunny ya la resuelve el grid, nunca JS. ---
     const track = document.getElementById('track');
     const bunny = document.getElementById('bunny');
-    const chainBarrier = document.getElementById('barrier-chain');
-    const wallBarrier = document.getElementById('barrier-wall');
+    const chainRow = document.getElementById('barrier-chain');
+    const wallRow = document.getElementById('barrier-wall');
     const zoneStart = document.getElementById('zone-start');
     const zoneEnd = document.getElementById('zone-end');
-
-    // El punto de corte de CADA barrera se mide, nunca se adivina: es
-    // exactamente el centro horizontal por donde camina Bunny — medido con
-    // getBoundingClientRect, no un 50% ni un 50vw asumido en CSS.
-    function bunnyPathX() {
-      return zoneStart.getBoundingClientRect().left + zoneStart.offsetWidth / 2;
-    }
-
-    function positionSplit(barrierEl, glyph) {
-      const x = bunnyPathX();
-      const leftWidth = x;
-      const rightWidth = window.innerWidth - x;
-      const halves = barrierEl.querySelectorAll('.half');
-      halves[0].style.width = leftWidth + 'px';
-      halves[1].style.width = rightWidth + 'px';
-      // el mismo número exacto, pasado directo — nunca recalculado aparte
-      fillHalf(halves[0], glyph, leftWidth);
-      fillHalf(halves[1], glyph, rightWidth);
-    }
-
-    function fillAllBarriers() {
-      positionSplit(chainBarrier, '🔗');
-      positionSplit(wallBarrier, '🧱');
-    }
-    requestAnimationFrame(fillAllBarriers);
-    let resizeTimer;
-    window.addEventListener('resize', () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(fillAllBarriers, 200);
-    });
 
     let chainOpen = false;
     let wallOpen = false;
 
+    // Distancia vertical, relativa a la posición natural de Bunny (renglón 1).
+    function offsetTo(targetEl) {
+      return targetEl.getBoundingClientRect().top - zoneStart.getBoundingClientRect().top;
+    }
+
     function clampLimit() {
-      const trackRect = track.getBoundingClientRect();
-      if (!chainOpen) return chainBarrier.getBoundingClientRect().top - trackRect.top;
-      if (!wallOpen) return wallBarrier.getBoundingClientRect().top - trackRect.top;
-      const r = zoneEnd.getBoundingClientRect();
-      return r.top - trackRect.top + r.height / 2;
+      if (!chainOpen) return offsetTo(chainRow);
+      if (!wallOpen) return offsetTo(wallRow);
+      return offsetTo(zoneEnd);
     }
 
-    function placeBunnyAt(y) {
-      bunny.style.top = (y - bunny.offsetHeight / 2) + 'px';
+    function placeBunnyAt(offsetY) {
+      bunny.style.transform = `translateY(${offsetY}px)`;
     }
 
-    function initialBunnyPos() {
-      const trackRect = track.getBoundingClientRect();
-      const r = zoneStart.getBoundingClientRect();
-      return r.top - trackRect.top + r.height / 2;
-    }
-
-    let currentPos = 0;
+    let currentOffset = 0;
     let dragging = false;
     let dragStartClientY = 0;
-    let dragStartPos = 0;
+    let dragStartOffset = 0;
 
     bunny.addEventListener('pointerdown', (e) => {
       dragging = true;
       bunny.classList.add('dragging');
       bunny.setPointerCapture(e.pointerId);
       dragStartClientY = e.clientY;
-      dragStartPos = currentPos;
+      dragStartOffset = currentOffset;
     });
     bunny.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       const delta = e.clientY - dragStartClientY;
       const max = clampLimit();
-      let next = Math.max(0, Math.min(max, dragStartPos + delta));
-      currentPos = next;
-      placeBunnyAt(currentPos);
+      currentOffset = Math.max(0, Math.min(max, dragStartOffset + delta));
+      placeBunnyAt(currentOffset);
     });
-    function midpointPos() {
-      const trackRect = track.getBoundingClientRect();
-      const a = chainBarrier.getBoundingClientRect().bottom - trackRect.top;
-      const b = wallBarrier.getBoundingClientRect().top - trackRect.top;
-      return (a + b) / 2;
-    }
-    function endPos() {
-      const trackRect = track.getBoundingClientRect();
-      const r = zoneEnd.getBoundingClientRect();
-      return r.top - trackRect.top + r.height / 2;
-    }
     function endDrag() {
       if (!dragging) return;
       dragging = false;
       bunny.classList.remove('dragging');
-      const candidates = [initialBunnyPos()];
-      if (chainOpen) candidates.push(midpointPos());
-      if (wallOpen) candidates.push(endPos());
+      const candidates = [0];
+      if (chainOpen) candidates.push((offsetTo(chainRow) + offsetTo(wallRow)) / 2);
+      if (wallOpen) candidates.push(offsetTo(zoneEnd));
       let best = candidates[0];
-      let bestDist = Math.abs(currentPos - best);
+      let bestDist = Math.abs(currentOffset - best);
       for (const c of candidates) {
-        const d = Math.abs(currentPos - c);
+        const d = Math.abs(currentOffset - c);
         if (d < bestDist) { best = c; bestDist = d; }
       }
-      currentPos = best;
-      placeBunnyAt(currentPos);
+      currentOffset = best;
+      bunny.style.transition = 'transform .35s cubic-bezier(.34,1.56,.64,1)';
+      placeBunnyAt(currentOffset);
+      setTimeout(() => { bunny.style.transition = ''; }, 350);
     }
     bunny.addEventListener('pointerup', endDrag);
     bunny.addEventListener('pointercancel', endDrag);
 
-    window.addEventListener('resize', () => {
-      currentPos = initialBunnyPos();
-      placeBunnyAt(currentPos);
-    });
-
     function render({ chainDown, wallDown, tech }) {
       chainOpen = chainDown;
       wallOpen = wallDown;
-      if (chainDown) chainBarrier.classList.add('open');
-      if (wallDown) wallBarrier.classList.add('open');
+      if (chainDown) chainRow.classList.add('open');
+      if (wallDown) wallRow.classList.add('open');
       document.getElementById('tech-content').textContent = tech;
       document.getElementById('hint').style.display = 'block';
     }
@@ -305,13 +260,8 @@
       const credParam = params.get('credential');
 
       document.getElementById('loading').style.display = 'none';
-      track.style.display = 'flex';
+      track.style.display = 'grid';
       document.getElementById('status-text').style.display = 'block';
-
-      requestAnimationFrame(() => {
-        currentPos = initialBunnyPos();
-        placeBunnyAt(currentPos);
-      });
 
       if (!credParam) {
         setStatus('🔗 Who goes there? Bunny can\'t prove it yet.');
