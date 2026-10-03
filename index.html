@@ -20,58 +20,50 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
     display: flex; flex-direction: column; align-items: center;
-    padding: 2rem 1.25rem 2.5rem;
+    padding: 2rem 0 2.5rem;
     overscroll-behavior: none;
+    overflow-x: hidden; /* las barreras se salen a 100vw a propósito */
   }
   .brand { font-size: 0.95rem; color: #6E8A5E; margin-bottom: 1.2rem; }
   .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
 
-  /* --- La pista: vertical en desktop, horizontal en móvil --- */
+  /* --- La pista: siempre vertical, sin lógica responsiva --- */
   #track {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
-    gap: 1.25rem;
     width: 100%;
     max-width: 420px;
-    min-height: 520px;
-    touch-action: none;
-  }
-  @media (max-width: 640px) {
-    #track {
-      flex-direction: row;
-      min-height: 0;
-      min-width: 100%;
-      height: 170px;
-      overflow-x: auto;
-    }
+    min-height: 560px;
   }
 
-  .zone { display: flex; align-items: center; justify-content: center; font-size: 3rem; flex-shrink: 0; }
-  #zone-start, #zone-end { width: 4.5rem; height: 4.5rem; }
+  .zone { display: flex; align-items: center; justify-content: center; font-size: 3rem; flex-shrink: 0; height: 5rem; }
 
+  /* Barreras: cruzan TODA la pantalla, no solo la tarjeta centrada */
   .barrier {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    height: 2.4rem;
+    margin-top: 1.6rem;
+    margin-bottom: 1.6rem;
     display: flex;
     flex-direction: row;
-    gap: 0.35rem;
-    font-size: 1.6rem;
-    transition: gap .5s ease;
+    overflow: hidden;
   }
-  @media (max-width: 640px) {
-    .barrier { flex-direction: column; }
+  .barrier .half {
+    width: 50%;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 1.4rem;
+    line-height: 2.4rem;
+    letter-spacing: -0.15em; /* pegados, sin separación visible */
+    transition: transform .7s cubic-bezier(.3,.9,.4,1), opacity .5s ease;
   }
-  .barrier .half { display: flex; flex-direction: row; gap: 0.35rem; transition: transform .6s cubic-bezier(.34,1.56,.64,1), opacity .5s ease; }
-  @media (max-width: 640px) {
-    .barrier .half { flex-direction: column; }
-  }
-  .barrier.open .half.a { transform: translate(-28px, -14px) rotate(-12deg); opacity: 0.25; }
-  .barrier.open .half.b { transform: translate(28px, 14px) rotate(12deg); opacity: 0.25; }
-  @media (max-width: 640px) {
-    .barrier.open .half.a { transform: translate(-14px, -28px) rotate(-12deg); opacity: 0.25; }
-    .barrier.open .half.b { transform: translate(14px, 28px) rotate(12deg); opacity: 0.25; }
-  }
+  .barrier .half.a { justify-content: flex-end; text-align: right; }
+  .barrier .half.b { justify-content: flex-start; text-align: left; }
+  .barrier.open .half.a { transform: translateX(-100%); opacity: 0.12; }
+  .barrier.open .half.b { transform: translateX(100%); opacity: 0.12; }
 
   #bunny {
     position: absolute;
@@ -80,7 +72,9 @@
     user-select: none;
     touch-action: none;
     z-index: 5;
-    transition: left .35s cubic-bezier(.34,1.56,.64,1), top .35s cubic-bezier(.34,1.56,.64,1);
+    left: 50%;
+    transform: translateX(-50%);
+    transition: top .35s cubic-bezier(.34,1.56,.64,1);
     filter: drop-shadow(0 3px 4px rgba(0,0,0,0.15));
   }
   #bunny.dragging { cursor: grabbing; transition: none; }
@@ -105,15 +99,11 @@
     </div>
 
     <div class="barrier" id="barrier-chain">
-      <div class="half a"><span>🔗</span><span>🔗</span><span>🔗</span></div>
-      <div class="half b"><span>🔗</span><span>🔗</span><span>🔗</span></div>
+      <span class="half a"></span><span class="half b"></span>
     </div>
 
-    <div class="zone" id="zone-mid" style="font-size:1rem; min-height:1px; min-width:1px;"></div>
-
     <div class="barrier" id="barrier-wall">
-      <div class="half a"><span>🧱</span><span>🧱</span><span>🧱</span></div>
-      <div class="half b"><span>🧱</span><span>🧱</span><span>🧱</span></div>
+      <span class="half a"></span><span class="half b"></span>
     </div>
 
     <div class="zone" id="zone-end">🥕</div>
@@ -140,6 +130,12 @@
     import { verifyAgent, setRegistryKeys } from 'https://esm.sh/@aria-registry/verify@1.1.0';
 
     const BUNNY_ORIGIN = 'https://thebunny.bar';
+
+    // Llenar cada mitad de barrera con suficientes eslabones/ladrillos para
+    // cubrir cualquier ancho de pantalla razonable, pegados sin espacio.
+    const REPEAT = 60;
+    document.querySelectorAll('#barrier-chain .half').forEach((el) => { el.textContent = '🔗'.repeat(REPEAT); });
+    document.querySelectorAll('#barrier-wall .half').forEach((el) => { el.textContent = '🧱'.repeat(REPEAT); });
 
     document.getElementById('policy-toggle').addEventListener('click', () => {
       const box = document.getElementById('policy-box');
@@ -170,7 +166,7 @@
       document.getElementById('status-text').textContent = text;
     }
 
-    // --- Lógica de arrastre + barreras ---
+    // --- Arrastre vertical únicamente — sin lógica responsiva ---
     const track = document.getElementById('track');
     const bunny = document.getElementById('bunny');
     const chainBarrier = document.getElementById('barrier-chain');
@@ -180,87 +176,55 @@
 
     let chainOpen = false;
     let wallOpen = false;
-    const axisIsVertical = () => window.matchMedia('(min-width: 641px)').matches;
 
     function clampLimit() {
       const trackRect = track.getBoundingClientRect();
-      if (!chainOpen) {
-        const r = chainBarrier.getBoundingClientRect();
-        return axisIsVertical() ? r.top - trackRect.top : r.left - trackRect.left;
-      }
-      if (!wallOpen) {
-        const r = wallBarrier.getBoundingClientRect();
-        return axisIsVertical() ? r.top - trackRect.top : r.left - trackRect.left;
-      }
+      if (!chainOpen) return chainBarrier.getBoundingClientRect().top - trackRect.top;
+      if (!wallOpen) return wallBarrier.getBoundingClientRect().top - trackRect.top;
       const r = zoneEnd.getBoundingClientRect();
-      return axisIsVertical()
-        ? (r.top - trackRect.top + r.height / 2)
-        : (r.left - trackRect.left + r.width / 2);
+      return r.top - trackRect.top + r.height / 2;
     }
 
-    function placeBunnyAt(pos) {
-      const trackRect = track.getBoundingClientRect();
-      const sr = zoneStart.getBoundingClientRect();
-      if (axisIsVertical()) {
-        bunny.style.left = (sr.left - trackRect.left + sr.width / 2 - bunny.offsetWidth / 2) + 'px';
-        bunny.style.top = (pos - bunny.offsetHeight / 2) + 'px';
-      } else {
-        bunny.style.top = (sr.top - trackRect.top + sr.height / 2 - bunny.offsetHeight / 2) + 'px';
-        bunny.style.left = (pos - bunny.offsetWidth / 2) + 'px';
-      }
+    function placeBunnyAt(y) {
+      bunny.style.top = (y - bunny.offsetHeight / 2) + 'px';
     }
 
     function initialBunnyPos() {
       const trackRect = track.getBoundingClientRect();
       const r = zoneStart.getBoundingClientRect();
-      return axisIsVertical()
-        ? (r.top - trackRect.top + r.height / 2)
-        : (r.left - trackRect.left + r.width / 2);
+      return r.top - trackRect.top + r.height / 2;
     }
 
     let currentPos = 0;
     let dragging = false;
-    let dragStartClient = 0;
+    let dragStartClientY = 0;
     let dragStartPos = 0;
-
-    function pointerAxisValue(e) {
-      return axisIsVertical() ? e.clientY : e.clientX;
-    }
 
     bunny.addEventListener('pointerdown', (e) => {
       dragging = true;
       bunny.classList.add('dragging');
       bunny.setPointerCapture(e.pointerId);
-      dragStartClient = pointerAxisValue(e);
+      dragStartClientY = e.clientY;
       dragStartPos = currentPos;
     });
     bunny.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      const delta = pointerAxisValue(e) - dragStartClient;
-      const min = 0;
+      const delta = e.clientY - dragStartClientY;
       const max = clampLimit();
-      let next = dragStartPos + delta;
-      next = Math.max(min, Math.min(max, next));
+      let next = Math.max(0, Math.min(max, dragStartPos + delta));
       currentPos = next;
       placeBunnyAt(currentPos);
     });
     function midpointPos() {
       const trackRect = track.getBoundingClientRect();
-      const a = axisIsVertical()
-        ? chainBarrier.getBoundingClientRect().bottom
-        : chainBarrier.getBoundingClientRect().right;
-      const b = axisIsVertical()
-        ? wallBarrier.getBoundingClientRect().top
-        : wallBarrier.getBoundingClientRect().left;
-      const base = axisIsVertical() ? trackRect.top : trackRect.left;
-      return ((a - base) + (b - base)) / 2;
+      const a = chainBarrier.getBoundingClientRect().bottom - trackRect.top;
+      const b = wallBarrier.getBoundingClientRect().top - trackRect.top;
+      return (a + b) / 2;
     }
     function endPos() {
       const trackRect = track.getBoundingClientRect();
       const r = zoneEnd.getBoundingClientRect();
-      return axisIsVertical()
-        ? (r.top - trackRect.top + r.height / 2)
-        : (r.left - trackRect.left + r.width / 2);
+      return r.top - trackRect.top + r.height / 2;
     }
     function endDrag() {
       if (!dragging) return;
