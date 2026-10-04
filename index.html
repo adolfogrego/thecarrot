@@ -6,11 +6,16 @@
 <title>thecarrot.rest</title>
 <style>
   :root {
-    --bg: #F2F6EC;
-    --ink: #1C2417;
-    --accent: #4C7A3D;
-    --line: #D8E4CB;
+    --bg: #E7EFDD;
+    --ink: #1F3A2A;
+    --node: #FBF8F0;
+    --path: #BFD6A8;
+    --locked: #B5482F;
+    --open: #3E7A4F;
+    --muted: #6E8560;
     --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --serif: Georgia, 'Iowan Old Style', 'Palatino', serif;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
@@ -18,151 +23,199 @@
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font-family: 'Iowan Old Style', 'Palatino', Georgia, serif;
+    font-family: var(--sans);
     display: flex; flex-direction: column; align-items: center;
-    padding: 2rem 0 2.5rem;
+    padding: 2.5rem 0 3rem;
     overscroll-behavior: none;
+    overflow-x: hidden;
   }
-  .brand { font-size: 0.95rem; color: #6E8A5E; margin-bottom: 1.2rem; }
-  .loading { text-align: center; padding: 2rem; color: #6E8A5E; font-family: var(--mono); font-size: 0.85rem; }
+
+  .brand { font-family: var(--serif); font-size: 1.4rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .subbrand { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.4rem; }
+  .loading { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.9rem; }
 
   /*
-    Grid de 3 columnas. La columna central es siempre la misma celda de
-    ancho fijo en cada renglón — eso alinea todo sin medir nada.
-    Bunny NO se mueve con transform/píxeles: se mueve de celda a celda,
-    literalmente cambiando de contenedor en el DOM. "Arrastrar" solo decide
-    A QUÉ celda saltar, nunca calcula una posición continua.
+    El trayecto es una "S invertida" hecha SOLO de segmentos rectos
+    (vertical/horizontal, nunca diagonal), con coordenadas fijas elegidas
+    a mano — nada se mide en tiempo real. #track tiene una altura fija en
+    píxeles para que los porcentajes de cada pieza signifiquen siempre lo
+    mismo, en cualquier pantalla.
+
+    Carril izquierdo = 30% · Carril derecho = 70%
+    Paradas:  inicio (30%, 0) → puerta 1 (y=25%) → medio (70%, 50%)
+              → puerta 2 (y=75%) → zanahoria (30%, 100%)
   */
   #track {
     position: relative;
-    display: grid;
-    grid-template-columns: 1fr 4.5rem 1fr;
-    row-gap: 3rem;
-    align-items: center;
     width: 100%;
-    overflow: hidden;
+    max-width: 480px;
+    height: 620px;
   }
 
-  .side {
-    overflow: hidden;
-    white-space: nowrap;
-    font-size: 1.4rem;
-    letter-spacing: -0.15em;
-  }
-  .side.left { text-align: right; }
-  .side.right { text-align: left; }
+  .segment { position: absolute; background: var(--path); }
+  .seg-v { width: 4px; }
+  .seg-h { height: 4px; }
 
-  .center-cell {
+  .node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    width: 4.75rem;
+    height: 4.75rem;
+    border-radius: 50%;
+    background: var(--node);
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    min-height: 4.5rem;
+    font-size: 2.6rem;
+    box-shadow: 0 2px 0 rgba(31,58,42,0.12), 0 6px 14px rgba(31,58,42,0.08);
   }
-
-  .barrier-fill {
-    font-size: 1.4rem;
-    letter-spacing: -0.15em;
-    overflow: hidden;
-    white-space: nowrap;
-    width: 100%;
-    text-align: center;
-    transition: opacity .6s ease;
-  }
-  .barrier-row.open .barrier-fill { opacity: 0.08; }
+  .node.empty { font-size: 1.1rem; color: var(--path); }
 
   #bunny {
-    font-size: 3.2rem;
     cursor: grab;
     user-select: none;
     touch-action: none;
-    filter: drop-shadow(0 3px 4px rgba(0,0,0,0.15));
-    transition: opacity .2s ease;
+    transition: opacity .2s ease, transform .2s ease;
   }
-  #bunny.dragging { cursor: grabbing; opacity: 0.85; }
+  #bunny.dragging { cursor: grabbing; opacity: 0.8; }
 
-  #zone-end { font-size: 3rem; }
+  .gate {
+    position: absolute;
+    left: 0;
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    transform: translateY(-50%);
+    z-index: 2;
+    background: var(--locked);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.85rem 0;
+    color: #FBF0EA;
+    font-size: 0.78rem;
+    transition: background-color .6s ease;
+  }
+  .gate .lock-icon { font-size: 1.5rem; transition: transform .5s ease; }
+  .gate.open { background: var(--open); color: #EFF8EC; }
+  .gate.open .lock-icon { transform: rotate(-18deg) scale(1.1); }
 
-  .status-text { font-size: 0.95rem; text-align: center; max-width: 30ch; min-height: 2.6em; margin-top: 1.4rem; font-weight: 600; }
-  .hint { font-family: var(--mono); font-size: 0.72rem; color: #8BA27C; margin-top: -0.6rem; }
+  .status-text { font-size: 1rem; text-align: center; max-width: 32ch; min-height: 2.6em; margin-top: 1.2rem; font-family: var(--serif); }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: -0.6rem; }
 
-  .links { display: flex; gap: 1rem; margin-top: 1.4rem; font-family: var(--mono); font-size: 0.78rem; }
-  .links a, .links button { color: var(--accent); background: none; border: none; cursor: pointer; text-decoration: underline; font-family: inherit; font-size: inherit; padding: 0; }
-  #policy-box, #tech-box { display: none; width: 100%; max-width: 420px; margin-top: 1rem; }
-  #policy-box pre, #tech-box pre { font-size: 0.72rem; background: #E9F0E1; border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  /* --- Pestaña del footer + hoja deslizante --- */
+  .sheet-tab {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--node);
+    border: 1px solid var(--path);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    padding: 0.65rem 1.4rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    cursor: pointer;
+    box-shadow: 0 -2px 10px rgba(31,58,42,0.08);
+    z-index: 40;
+  }
+  .sheet-overlay {
+    position: fixed; inset: 0;
+    background: rgba(31,58,42,0.25);
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s ease;
+    z-index: 45;
+  }
+  .sheet-overlay.visible { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    max-height: 78vh;
+    background: var(--node);
+    border-radius: 20px 20px 0 0;
+    transform: translateY(100%);
+    transition: transform .35s cubic-bezier(.3,.9,.4,1);
+    z-index: 46;
+    padding: 1.6rem 1.4rem 2.2rem;
+    overflow-y: auto;
+  }
+  .sheet.visible { transform: translateY(0); }
+  .sheet .close-btn {
+    position: absolute; top: 0.7rem; right: 1rem;
+    background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--muted);
+  }
+  .sheet h3 { font-family: var(--serif); margin: 0 0 0.6rem; font-size: 1.15rem; padding-right: 2rem; }
+  .sheet p.narrative { font-size: 0.95rem; line-height: 1.55; margin: 0 0 1.2rem; max-width: 52ch; }
+  .sheet .section-label { font-size: 0.75rem; color: var(--muted); margin: 1.1rem 0 0.3rem; }
+  .sheet pre { font-family: var(--mono); font-size: 0.72rem; background: #F2EEE2; border: 1px solid var(--path); border-radius: 8px; padding: 0.85rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--ink); margin: 0; }
 </style>
 </head>
 <body>
   <div class="brand">thecarrot.rest</div>
+  <div class="subbrand">receiver of an ARIA credential</div>
 
   <div id="loading" class="loading">Checking Bunny's credential…</div>
 
   <div id="track" style="display:none">
-    <!-- renglón 1: inicio (Bunny vive aquí al cargar) -->
-    <div class="side left"></div>
-    <div class="center-cell" id="zone-0"><span id="bunny">🐇</span></div>
-    <div class="side right"></div>
+    <!-- segmentos del trayecto, coordenadas fijas -->
+    <div class="segment seg-v" style="left:30%; top:0;    height:25%;"></div>
+    <div class="segment seg-h" style="top:25%; left:30%;  width:40%;"></div>
+    <div class="segment seg-v" style="left:70%; top:25%;  height:50%;"></div>
+    <div class="segment seg-h" style="top:75%; left:30%;  width:40%;"></div>
+    <div class="segment seg-v" style="left:30%; top:75%;  height:25%;"></div>
 
-    <!-- renglón 2: cadena -->
-    <div class="side left" data-fill="🔗"></div>
-    <div class="center-cell barrier-row" id="barrier-chain">
-      <span class="barrier-fill" data-fill="🔗"></span>
+    <!-- paradas -->
+    <div class="node" id="zone-0" style="left:30%; top:0;"><span id="bunny">🐇</span></div>
+    <div class="node empty" id="zone-1" style="left:70%; top:50%;">·</div>
+    <div class="node" id="zone-2" style="left:30%; top:100%;">🥕</div>
+
+    <!-- puertas -->
+    <div class="gate" id="barrier-chain" style="top:25%;">
+      <span class="lock-icon">🔒</span>
+      <span class="gate-label">identity</span>
     </div>
-    <div class="side right" data-fill="🔗"></div>
-
-    <!-- renglón 3: zona intermedia (entre cadena y muro) -->
-    <div class="side left"></div>
-    <div class="center-cell" id="zone-1"></div>
-    <div class="side right"></div>
-
-    <!-- renglón 4: muro -->
-    <div class="side left" data-fill="🧱"></div>
-    <div class="center-cell barrier-row" id="barrier-wall">
-      <span class="barrier-fill" data-fill="🧱"></span>
+    <div class="gate" id="barrier-wall" style="top:75%;">
+      <span class="lock-icon">🔒</span>
+      <span class="gate-label">scope: carrot:action:eat</span>
     </div>
-    <div class="side right" data-fill="🧱"></div>
-
-    <!-- renglón 5: zanahoria -->
-    <div class="side left"></div>
-    <div class="center-cell" id="zone-2">🥕</div>
-    <div class="side right"></div>
   </div>
 
   <p class="status-text" id="status-text" style="display:none"></p>
   <p class="hint" id="hint" style="display:none">drag 🐇 forward</p>
 
-  <div class="links">
-    <button id="policy-toggle">view policy</button>
-    <button id="tech-toggle">technical panel</button>
-  </div>
+  <button class="sheet-tab" id="sheet-tab">what's happening?</button>
+  <div class="sheet-overlay" id="sheet-overlay"></div>
+  <div class="sheet" id="sheet">
+    <button class="close-btn" id="sheet-close">✕</button>
+    <h3 id="sheet-title">Nothing has happened yet</h3>
+    <p class="narrative" id="sheet-narrative"></p>
 
-  <div id="policy-box">
+    <div id="sheet-credential-section" style="display:none">
+      <div class="section-label">this is the credential</div>
+      <pre id="sheet-credential"></pre>
+    </div>
+
+    <div class="section-label">thecarrot.rest's policy</div>
     <pre>_aria-policy.thecarrot.rest TXT
 "v=ATP1; min=L0; req.reach=carrot:action:reach; req.eat=carrot:action:eat; fresh=3600; anchor=wellknown"</pre>
-  </div>
 
-  <div id="tech-box">
-    <pre id="tech-content">—</pre>
+    <div class="section-label">technical detail</div>
+    <pre id="sheet-tech">—</pre>
   </div>
 
   <script type="module">
     import { verifyAgent, setRegistryKeys } from 'https://esm.sh/@aria-registry/verify@1.1.0';
 
     const BUNNY_ORIGIN = 'https://thebunny.bar';
-    const REPEAT = 120;
 
-    document.querySelectorAll('[data-fill]').forEach((el) => {
-      el.textContent = el.dataset.fill.repeat(REPEAT);
-    });
-
-    document.getElementById('policy-toggle').addEventListener('click', () => {
-      const box = document.getElementById('policy-box');
-      box.style.display = box.style.display === 'block' ? 'none' : 'block';
-    });
-    document.getElementById('tech-toggle').addEventListener('click', () => {
-      const box = document.getElementById('tech-box');
-      box.style.display = box.style.display === 'block' ? 'none' : 'block';
-    });
+    const sheet = document.getElementById('sheet');
+    const sheetOverlay = document.getElementById('sheet-overlay');
+    function openSheet() { sheet.classList.add('visible'); sheetOverlay.classList.add('visible'); }
+    function closeSheet() { sheet.classList.remove('visible'); sheetOverlay.classList.remove('visible'); }
+    document.getElementById('sheet-tab').addEventListener('click', openSheet);
+    document.getElementById('sheet-close').addEventListener('click', closeSheet);
+    sheetOverlay.addEventListener('click', closeSheet);
 
     function hexToBytes(hex) {
       const clean = hex.trim();
@@ -184,20 +237,17 @@
       document.getElementById('status-text').textContent = text;
     }
 
-    // ---------------------------------------------------------------
-    // Bunny vive en UNA de tres celdas: zones[0] (inicio), zones[1]
-    // (entre barreras), zones[2] (zanahoria). Nunca hay una posición
-    // intermedia en píxeles — solo "en cuál celda está ahora mismo".
-    // ---------------------------------------------------------------
+    // --- Bunny vive en uno de tres nodos; "arrastrar" solo decide a cuál
+    // saltar. Las coordenadas de cada nodo ya están fijas en el CSS de
+    // arriba — aquí no se mide ni se calcula ninguna posición. ---
     const bunny = document.getElementById('bunny');
     const zones = [
       document.getElementById('zone-0'),
       document.getElementById('zone-1'),
       document.getElementById('zone-2'),
     ];
-
-    const chainRow = document.getElementById('barrier-chain');
-    const wallRow = document.getElementById('barrier-wall');
+    const chainGate = document.getElementById('barrier-chain');
+    const wallGate = document.getElementById('barrier-wall');
 
     let currentZone = 0;
     let chainOpen = false;
@@ -214,11 +264,7 @@
       zones[zoneIndex].appendChild(bunny);
     }
 
-    // Arrastre: solo cuenta CUÁNTO te moviste desde el último paso. Cruzar
-    // un umbral (p. ej. 70px) intenta avanzar o retroceder UNA celda — y
-    // solo avanza si esa celda está permitida. No hay posición continua
-    // que recordar ni clampear.
-    const STEP_THRESHOLD = 70;
+    const STEP_THRESHOLD = 60;
     let dragging = false;
     let dragAccum = 0;
     let dragLastY = 0;
@@ -240,7 +286,6 @@
         dragAccum = 0;
         const next = currentZone + 1;
         if (next <= maxAllowedZone()) moveBunnyTo(next);
-        // si no está permitido, simplemente no pasa nada — Bunny se queda
       } else if (dragAccum <= -STEP_THRESHOLD) {
         dragAccum = 0;
         const prev = currentZone - 1;
@@ -255,12 +300,27 @@
     bunny.addEventListener('pointerup', endDrag);
     bunny.addEventListener('pointercancel', endDrag);
 
-    function render({ chainDown, wallDown, tech }) {
+    function render({ chainDown, wallDown, title, narrative, credential, tech }) {
       chainOpen = chainDown;
       wallOpen = wallDown;
-      if (chainDown) chainRow.classList.add('open');
-      if (wallDown) wallRow.classList.add('open');
-      document.getElementById('tech-content').textContent = tech;
+      if (chainDown) {
+        chainGate.classList.add('open');
+        chainGate.querySelector('.lock-icon').textContent = '🔓';
+      }
+      if (wallDown) {
+        wallGate.classList.add('open');
+        wallGate.querySelector('.lock-icon').textContent = '🔓';
+      }
+      document.getElementById('sheet-title').textContent = title;
+      document.getElementById('sheet-narrative').textContent = narrative;
+      document.getElementById('sheet-tech').textContent = tech;
+      const credSection = document.getElementById('sheet-credential-section');
+      if (credential) {
+        credSection.style.display = 'block';
+        document.getElementById('sheet-credential').textContent = JSON.stringify(credential, null, 2);
+      } else {
+        credSection.style.display = 'none';
+      }
       document.getElementById('hint').style.display = 'block';
     }
 
@@ -269,12 +329,17 @@
       const credParam = params.get('credential');
 
       document.getElementById('loading').style.display = 'none';
-      document.getElementById('track').style.display = 'grid';
+      document.getElementById('track').style.display = 'block';
       document.getElementById('status-text').style.display = 'block';
 
       if (!credParam) {
-        setStatus('🔗 Who goes there? Bunny can\'t prove it yet.');
-        render({ chainDown: false, wallDown: false, tech: 'No credential presented.' });
+        setStatus('Who goes there? Bunny can\'t prove it yet.');
+        render({
+          chainDown: false, wallDown: false,
+          title: 'Bunny has no identity',
+          narrative: 'Bunny hasn\'t presented anything yet — no credential came along with it. With nothing to check, there\'s nothing to trust, so Bunny can\'t move past the first gate.',
+          tech: 'No credential presented.',
+        });
         return;
       }
 
@@ -282,8 +347,13 @@
       try {
         credential = base64urlToJson(credParam);
       } catch (e) {
-        setStatus('🔗 That link is malformed — Bunny stays put.');
-        render({ chainDown: false, wallDown: false, tech: 'Could not decode credential param: ' + e.message });
+        setStatus('That link is malformed — Bunny stays put.');
+        render({
+          chainDown: false, wallDown: false,
+          title: 'That credential doesn\'t even parse',
+          narrative: 'Whatever Bunny showed up with isn\'t readable as a credential at all — it\'s not just invalid, it\'s not even in the right shape. The gate stays shut.',
+          tech: 'Could not decode credential param: ' + e.message,
+        });
         return;
       }
 
@@ -292,8 +362,14 @@
         const res = await fetch(BUNNY_ORIGIN + '/.well-known/aria-identity.json', { cache: 'no-store' });
         identity = await res.json();
       } catch (e) {
-        setStatus('🔗 Could not reach thebunny.bar to check the key.');
-        render({ chainDown: false, wallDown: false, tech: 'Discovery fetch failed: ' + e.message });
+        setStatus('Could not reach thebunny.bar to check the key.');
+        render({
+          chainDown: false, wallDown: false,
+          title: 'thecarrot.rest can\'t look up Bunny\'s key',
+          narrative: 'thebunny.bar can\'t be reached right now, so there\'s no public key to check this credential against. Until that lookup succeeds, nothing can be trusted — not because the credential is bad, but because there\'s no way yet to tell.',
+          credential,
+          tech: 'Discovery fetch failed: ' + e.message,
+        });
         return;
       }
 
@@ -301,8 +377,14 @@
       const result = verifyAgent(credential);
 
       if (!result.valid) {
-        setStatus('🔗 Signature check failed — the chain stays shut.');
-        render({ chainDown: false, wallDown: false, tech: 'Rejected — ' + result.reason });
+        setStatus('Signature check failed — the gate stays shut.');
+        render({
+          chainDown: false, wallDown: false,
+          title: 'This credential doesn\'t check out',
+          narrative: 'Bunny showed up with something that looks like a credential, but the signature doesn\'t verify — either it wasn\'t really signed by thebunny.bar, or it was changed after it was signed. Either way, it can\'t be trusted, so the gate stays shut.',
+          credential,
+          tech: 'Rejected — ' + result.reason,
+        });
         return;
       }
 
@@ -310,17 +392,23 @@
       const canEat = scopes.includes('carrot:action:eat');
 
       if (!canEat) {
-        setStatus('🧱 Bunny\'s through — but hasn\'t earned dinner rights.');
+        setStatus('Bunny\'s identity checks out — but dinner isn\'t authorized yet.');
         render({
           chainDown: true,
           wallDown: false,
+          title: 'Bunny can cross, but can\'t eat',
+          narrative: 'Bunny has a real, verified credential — the identity gate opens. But that credential doesn\'t include permission to eat the carrot, only to be here. Bunny can walk right up to it and still isn\'t allowed to take it. This is the credential:',
+          credential,
           tech: `Identity valid — did=${result.did}, trustLevel=${result.trustLevel}, scopes=[${scopes.join(', ')}]\nRejected — signature valid; declared scope does not include required "carrot:action:eat" per _aria-policy.thecarrot.rest`,
         });
       } else {
-        setStatus('🧱💥 Scope granted. Drag Bunny all the way home.');
+        setStatus('Scope granted. Drag Bunny all the way home.');
         render({
           chainDown: true,
           wallDown: true,
+          title: 'Bunny can cross — and eat',
+          narrative: 'Bunny\'s credential checks out, and it explicitly includes permission to eat the carrot. Both gates open. This is the credential:',
+          credential,
           tech: `Identity valid — did=${result.did}, trustLevel=${result.trustLevel}, scopes=[${scopes.join(', ')}]\nAdmitted — signature valid; scope satisfies req.eat=carrot:action:eat`,
         });
       }
