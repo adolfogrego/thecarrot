@@ -86,7 +86,7 @@
   .gate-badge {
     position: absolute;
     z-index: 3;
-    transform: translate(-50%, -1.1rem); /* centro del candado sobre el tramo */
+    transform: translate(-50%, -1.3rem); /* centro del candado sobre el tramo */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -94,16 +94,18 @@
     pointer-events: none;
   }
   .lock-circle {
-    width: 2.2rem; height: 2.2rem;
+    width: 2.6rem; height: 2.6rem;
     border-radius: 50%;
     background: var(--node);
     border: 2px solid var(--locked);
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.1rem;
+    font-size: 1.5rem;
     box-shadow: 0 2px 8px rgba(31,58,42,0.14);
     transition: border-color .6s ease;
   }
+  .lock-icon { display: inline-block; transition: transform .5s ease; }
   .gate-badge.open .lock-circle { border-color: var(--open); }
+  .gate-badge.open .lock-icon { transform: rotate(-18deg) scale(1.1); }
   .gate-label { font-size: 0.72rem; color: var(--muted); }
 
   .node {
@@ -146,19 +148,20 @@
                 background-color .5s ease, box-shadow .5s ease, margin-left .5s ease;
   }
   .bunny-emoji, .carrot-emoji { display: inline-block; }
-  .carrot-emoji { transform-origin: 75% 25%; transition: font-size .5s ease, transform .5s ease; }
+  .carrot-emoji { transform-origin: 25% 75%; transition: font-size .5s ease, transform .5s ease; }
 
   /* Al llegar a la zanahoria, los dos caben juntos dentro del mismo círculo:
-     Bunny pierde su ficha (queda "desnudo") y se achica a la izquierda, y la
-     zanahoria se achica a la derecha. Después viene lo de las mordidas. */
+     Bunny pierde su ficha (queda "desnudo") y se achica a la derecha, y la
+     zanahoria se achica a la izquierda: así Bunny, que mira hacia la
+     izquierda, la tiene de frente. Después vienen las mordidas. */
   #bunny.sharing {
     width: 2.6rem; height: 2.6rem;
     font-size: 1.7rem;
     background-color: transparent;
     box-shadow: none;
-    margin-left: -19px;
+    margin-left: 19px;
   }
-  .node.sharing .carrot-emoji { font-size: 1.7rem; transform: translateX(19px); }
+  .node.sharing .carrot-emoji { font-size: 1.7rem; transform: translateX(-19px); }
   #bunny.dragging {
     cursor: grabbing;
     transition: none; /* sigue al dedo sin retraso */
@@ -436,7 +439,7 @@
     const BITE_TIMES = [150, 750, 1350, 1950]; // ms, dentro de la secuencia
     const BITE_SCALES = [0.72, 0.46, 0.22, 0];  // tamaño de la zanahoria tras cada mordida
     const BITES_TOTAL = 2400;                   // ms
-    const SHARE_SHIFT = 'translateX(19px)';     // la zanahoria queda a la derecha de Bunny
+    const SHARE_SHIFT = 'translateX(-19px)';    // la zanahoria queda a la izquierda de Bunny
 
     function biteFrames() {
       const D = BITES_TOTAL;
