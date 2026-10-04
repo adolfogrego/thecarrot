@@ -141,8 +141,24 @@
     cursor: grab;
     user-select: none;
     touch-action: none;
-    transition: left .5s cubic-bezier(.34,1.56,.64,1), top .5s cubic-bezier(.34,1.56,.64,1);
+    transition: left .5s cubic-bezier(.34,1.56,.64,1), top .5s cubic-bezier(.34,1.56,.64,1),
+                width .5s ease, height .5s ease, font-size .5s ease,
+                background-color .5s ease, box-shadow .5s ease, margin-left .5s ease;
   }
+  .bunny-emoji, .carrot-emoji { display: inline-block; }
+  .carrot-emoji { transform-origin: 75% 25%; transition: font-size .5s ease, transform .5s ease; }
+
+  /* Al llegar a la zanahoria, los dos caben juntos dentro del mismo círculo:
+     Bunny pierde su ficha (queda "desnudo") y se achica a la izquierda, y la
+     zanahoria se achica a la derecha. Después viene lo de las mordidas. */
+  #bunny.sharing {
+    width: 2.6rem; height: 2.6rem;
+    font-size: 1.7rem;
+    background-color: transparent;
+    box-shadow: none;
+    margin-left: -19px;
+  }
+  .node.sharing .carrot-emoji { font-size: 1.7rem; transform: translateX(19px); }
   #bunny.dragging {
     cursor: grabbing;
     transition: none; /* sigue al dedo sin retraso */
@@ -222,8 +238,8 @@
       <div class="gate-label">scope</div>
     </div>
 
-    <div class="node" id="carrot" style="left:30%; top:100%;">🥕</div>
-    <div id="bunny">🐇</div>
+    <div class="node" id="carrot" style="left:30%; top:100%;"><span class="carrot-emoji" id="carrot-emoji">🥕</span></div>
+    <div id="bunny"><span class="bunny-emoji" id="bunny-emoji">🐇</span></div>
   </div>
 
   <p class="status-text" id="status-text" style="display:none"></p>
@@ -302,6 +318,9 @@
     let wallOpen = false;
     let geo = null;         // medidas del contenedor y longitudes del camino
     let s = 0;              // píxeles recorridos a lo largo del camino
+    let eating = false;     // la secuencia de llegada está en curso
+    let ate = false;        // la zanahoria ya se comió (hasta recargar la página)
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function measure() {
       const W = track.clientWidth, H = track.clientHeight;
@@ -318,7 +337,7 @@
     function limit() {
       if (!chainOpen) return geo.cum[1] - GATE_STOP;
       if (!wallOpen) return geo.cum[3] - GATE_STOP;
-      return geo.total - CARROT_STOP;
+      return ate ? geo.total : geo.total - CARROT_STOP;
     }
 
     function pointAt(dist) {
@@ -368,6 +387,7 @@
     let grab = [0, 0]; // dónde agarró el dedo a Bunny, para que no "salte" al tocarlo
 
     bunny.addEventListener('pointerdown', (e) => {
+      if (eating) return;
       measure();
       dragging = true;
       bunny.classList.add('dragging');
@@ -386,6 +406,13 @@
       // Contra una puerta cerrada Bunny SÍ se mueve, pero cada vez con más
       // resistencia: se deja empujar unos pocos píxeles y no pasa de ahí.
       const lim = limit();
+
+      // Con las dos puertas abiertas, llegar al final del camino dispara la
+      // llegada (con un poco de margen, para que no dependa de un píxel).
+      if (chainOpen && wallOpen && !ate && !eating && next >= lim - 6) {
+        arrive(e.pointerId);
+        return;
+      }
       if (next > lim) next = lim + Math.min(MAX_PUSH, (next - lim) * 0.3);
 
       s = Math.max(0, next);
@@ -403,8 +430,73 @@
     bunny.addEventListener('pointerup', endDrag);
     bunny.addEventListener('pointercancel', endDrag);
 
+    // --- Llegada: Bunny se mete al círculo de la zanahoria, comparten el
+    // espacio, y la zanahoria desaparece en cuatro mordidas con un brinquito
+    // de Bunny en cada una. ---
+    const BITE_TIMES = [150, 750, 1350, 1950]; // ms, dentro de la secuencia
+    const BITE_SCALES = [0.72, 0.46, 0.22, 0];  // tamaño de la zanahoria tras cada mordida
+    const BITES_TOTAL = 2400;                   // ms
+    const SHARE_SHIFT = 'translateX(19px)';     // la zanahoria queda a la derecha de Bunny
+
+    function biteFrames() {
+      const D = BITES_TOTAL;
+      const carrot = [{ transform: `${SHARE_SHIFT} scale(1)`, offset: 0 }];
+      let prev = 1;
+      BITE_TIMES.forEach((t, i) => {
+        carrot.push({ transform: `${SHARE_SHIFT} scale(${prev})`, offset: t / D, easing: 'ease-out' });
+        carrot.push({ transform: `${SHARE_SHIFT} scale(${BITE_SCALES[i]})`, offset: (t + 120) / D });
+        prev = BITE_SCALES[i];
+      });
+      carrot.push({ transform: `${SHARE_SHIFT} scale(0)`, offset: 1 });
+
+      const rest = 'translateY(0) rotate(0deg)';
+      const hop = [{ transform: rest, offset: 0 }];
+      BITE_TIMES.forEach((t) => {
+        hop.push({ transform: rest, offset: (t - 60) / D, easing: 'ease-out' });
+        hop.push({ transform: 'translateY(-9px) rotate(-8deg)', offset: (t + 40) / D, easing: 'ease-in' });
+        hop.push({ transform: rest, offset: (t + 160) / D });
+      });
+      hop.push({ transform: rest, offset: 1 });
+      return { carrot, hop };
+    }
+
+    function finishEating() {
+      const carrotEmoji = document.getElementById('carrot-emoji');
+      carrotEmoji.style.visibility = 'hidden';
+      bunny.classList.remove('sharing'); // Bunny vuelve a ser ficha, sola en el círculo
+      ate = true;
+      eating = false;
+      setStatus('Bunny ate the carrot.');
+      document.getElementById('sheet-title').textContent = 'Bunny ate the carrot';
+      document.getElementById('sheet-narrative').textContent = 'Bunny\'s credential checked out and explicitly included permission to eat the carrot — so it made it all the way home and ate it. This is the credential:';
+      document.getElementById('hint').style.display = 'none';
+    }
+
+    function arrive(pointerId) {
+      eating = true;
+      dragging = false;
+      bunny.classList.remove('dragging');
+      try { bunny.releasePointerCapture(pointerId); } catch (_) {}
+
+      measure();
+      s = geo.total;   // el centro del círculo de la zanahoria
+      renderBunny();
+
+      if (reduceMotion) { finishEating(); return; }
+
+      bunny.classList.add('sharing');
+      document.getElementById('carrot').classList.add('sharing');
+
+      setTimeout(() => {
+        const frames = biteFrames();
+        document.getElementById('carrot-emoji').animate(frames.carrot, { duration: BITES_TOTAL, fill: 'forwards' });
+        document.getElementById('bunny-emoji').animate(frames.hop, { duration: BITES_TOTAL });
+        setTimeout(finishEating, BITES_TOTAL + 150);
+      }, 650);
+    }
+
     window.addEventListener('resize', () => {
-      if (!geo) return;
+      if (!geo || eating) return;
       measure();
       s = Math.min(s, limit());
       renderBunny();
