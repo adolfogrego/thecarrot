@@ -73,12 +73,21 @@
   .node.empty { font-size: 1.1rem; color: var(--path); }
 
   #bunny {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.6rem; /* fijo siempre — nunca hereda del contenedor */
     cursor: grab;
     user-select: none;
     touch-action: none;
-    transition: opacity .2s ease, transform .2s ease;
+    /* área de toque más grande que el glifo, para el dedo en móvil */
+    padding: 0.6rem;
+    margin: -0.6rem;
+    transition: opacity .2s ease;
   }
   #bunny.dragging { cursor: grabbing; opacity: 0.8; }
+
+
 
   .gate {
     position: absolute;
@@ -259,12 +268,26 @@
       return 2;
     }
 
+    // Animación FLIP: antes de mover a Bunny de contenedor, se mide dónde
+    // estaba; después de moverlo, se calcula cuánto "saltó" y se anima
+    // desde ahí de regreso a su posición real — así el cambio de celda se
+    // ve como un deslizamiento suave, no un teletransporte.
     function moveBunnyTo(zoneIndex) {
+      const before = bunny.getBoundingClientRect();
       currentZone = zoneIndex;
       zones[zoneIndex].appendChild(bunny);
+      const after = bunny.getBoundingClientRect();
+      const dx = before.left - after.left;
+      const dy = before.top - after.top;
+      bunny.style.transition = 'none';
+      bunny.style.transform = `translate(${dx}px, ${dy}px)`;
+      requestAnimationFrame(() => {
+        bunny.style.transition = 'transform .4s cubic-bezier(.3,.9,.4,1)';
+        bunny.style.transform = 'translate(0, 0)';
+      });
     }
 
-    const STEP_THRESHOLD = 60;
+    const STEP_THRESHOLD = 45; // más sensible al dedo que al mouse
     let dragging = false;
     let dragAccum = 0;
     let dragLastY = 0;
