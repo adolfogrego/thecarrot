@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>thecarrot.rest</title>
+<meta property="og:title" content="thecarrot.rest — can Bunny reach the carrot?">
+<meta property="og:description" content="A playful, working demo of the ARIA protocol: Bunny needs a real verified identity — and the right scope — to reach the carrot.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://thecarrot.rest/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="thecarrot.rest — can Bunny reach the carrot?">
+<meta name="twitter:description" content="A playful, working demo of the ARIA protocol: Bunny needs a real verified identity — and the right scope — to reach the carrot.">
 <style>
   :root {
     --bg: #E7EFDD;
@@ -36,25 +43,68 @@
 
   /*
     El trayecto es una "S invertida" hecha SOLO de segmentos rectos
-    (vertical/horizontal, nunca diagonal), con coordenadas fijas elegidas
-    a mano — nada se mide en tiempo real. #track tiene una altura fija en
-    píxeles para que los porcentajes de cada pieza signifiquen siempre lo
-    mismo, en cualquier pantalla.
+    (vertical/horizontal, nunca diagonal). Todo se define en porcentajes del
+    contenedor, así que el dibujo (SVG), las puertas y Bunny comparten
+    exactamente el mismo sistema de coordenadas.
 
     Carril izquierdo = 30% · Carril derecho = 70%
-    Paradas:  inicio (30%, 0) → puerta 1 (y=25%) → medio (70%, 50%)
-              → puerta 2 (y=75%) → zanahoria (30%, 100%)
+    Recorrido: inicio (30%, 0) → puerta 1 (y=25%) → carril derecho
+               → puerta 2 (y=75%) → zanahoria (30%, 100%)
   */
   #track {
     position: relative;
     width: 100%;
     max-width: 480px;
-    height: 620px;
+    height: 700px;
+    /* espacio de sobra arriba/abajo: la mitad del círculo de Bunny y de la
+       zanahoria vive fuera del contenedor por diseño (están en 0% y 100%),
+       y sin este margen se monta sobre el texto vecino */
+    margin: 2.6rem 0;
   }
 
-  .segment { position: absolute; background: var(--path); }
-  .seg-v { width: 4px; }
-  .seg-h { height: 4px; }
+  /* El camino: una sola línea con esquinas redondeadas. non-scaling-stroke
+     mantiene el grosor en píxeles reales aunque el SVG se estire. */
+  .path-svg {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    overflow: visible;
+    z-index: 1;
+  }
+  .path-svg polyline, .path-svg line {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
+  .path-svg polyline { stroke: var(--path); stroke-width: 4; }
+
+  /* Las puertas son los dos tramos horizontales del camino: cerrados en
+     rojo, abiertos en verde. Sin franjas de ancho completo. */
+  .path-svg .gate-line { stroke: var(--locked); stroke-width: 10; transition: stroke .6s ease; }
+  .path-svg .gate-line.open { stroke: var(--open); }
+
+  .gate-badge {
+    position: absolute;
+    z-index: 3;
+    transform: translate(-50%, -1.1rem); /* centro del candado sobre el tramo */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    pointer-events: none;
+  }
+  .lock-circle {
+    width: 2.2rem; height: 2.2rem;
+    border-radius: 50%;
+    background: var(--node);
+    border: 2px solid var(--locked);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+    box-shadow: 0 2px 8px rgba(31,58,42,0.14);
+    transition: border-color .6s ease;
+  }
+  .gate-badge.open .lock-circle { border-color: var(--open); }
+  .gate-label { font-size: 0.72rem; color: var(--muted); }
 
   .node {
     position: absolute;
@@ -70,45 +120,34 @@
     font-size: 2.6rem;
     box-shadow: 0 2px 0 rgba(31,58,42,0.12), 0 6px 14px rgba(31,58,42,0.08);
   }
-  .node.empty { font-size: 1.1rem; color: var(--path); }
 
+  /* Bunny es una ficha que se desliza por el camino. Su posición (left/top en
+     %) la calcula el JS a lo largo del recorrido; al soltarlo contra una
+     puerta cerrada, la transición con rebote lo devuelve a su sitio. */
   #bunny {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2.6rem; /* fijo siempre — nunca hereda del contenedor */
-    cursor: grab;
-    user-select: none;
-    touch-action: none;
-    /* área de toque más grande que el glifo, para el dedo en móvil */
-    padding: 0.6rem;
-    margin: -0.6rem;
-    transition: opacity .2s ease;
-  }
-  #bunny.dragging { cursor: grabbing; opacity: 0.8; }
-
-
-
-  .gate {
     position: absolute;
-    left: 0;
-    width: 100vw;
-    margin-left: calc(50% - 50vw);
-    transform: translateY(-50%);
-    z-index: 2;
-    background: var(--locked);
+    left: 30%; top: 0;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    width: 4.75rem;
+    height: 4.75rem;
+    border-radius: 50%;
+    background: var(--node);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.6rem;
-    padding: 0.85rem 0;
-    color: #FBF0EA;
-    font-size: 0.78rem;
-    transition: background-color .6s ease;
+    font-size: 2.6rem;
+    box-shadow: 0 2px 0 rgba(31,58,42,0.12), 0 6px 14px rgba(31,58,42,0.08);
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    transition: left .5s cubic-bezier(.34,1.56,.64,1), top .5s cubic-bezier(.34,1.56,.64,1);
   }
-  .gate .lock-icon { font-size: 1.5rem; transition: transform .5s ease; }
-  .gate.open { background: var(--open); color: #EFF8EC; }
-  .gate.open .lock-icon { transform: rotate(-18deg) scale(1.1); }
+  #bunny.dragging {
+    cursor: grabbing;
+    transition: none; /* sigue al dedo sin retraso */
+    box-shadow: 0 2px 0 rgba(31,58,42,0.12), 0 10px 20px rgba(31,58,42,0.16);
+  }
 
   .status-text { font-size: 1rem; text-align: center; max-width: 32ch; min-height: 2.6em; margin-top: 1.2rem; font-family: var(--serif); }
   .hint { font-size: 0.78rem; color: var(--muted); margin-top: -0.6rem; }
@@ -167,27 +206,24 @@
   <div id="loading" class="loading">Checking Bunny's credential…</div>
 
   <div id="track" style="display:none">
-    <!-- segmentos del trayecto, coordenadas fijas -->
-    <div class="segment seg-v" style="left:30%; top:0;    height:25%;"></div>
-    <div class="segment seg-h" style="top:25%; left:30%;  width:40%;"></div>
-    <div class="segment seg-v" style="left:70%; top:25%;  height:50%;"></div>
-    <div class="segment seg-h" style="top:75%; left:30%;  width:40%;"></div>
-    <div class="segment seg-v" style="left:30%; top:75%;  height:25%;"></div>
+    <!-- el camino y las dos puertas (tramos horizontales), en % del contenedor -->
+    <svg class="path-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="30,0 30,25 70,25 70,75 30,75 30,100" vector-effect="non-scaling-stroke"/>
+      <line class="gate-line" id="gate-line-chain" x1="30" y1="25" x2="70" y2="25" vector-effect="non-scaling-stroke"/>
+      <line class="gate-line" id="gate-line-wall"  x1="70" y1="75" x2="30" y2="75" vector-effect="non-scaling-stroke"/>
+    </svg>
 
-    <!-- paradas -->
-    <div class="node" id="zone-0" style="left:30%; top:0;"><span id="bunny">🐇</span></div>
-    <div class="node empty" id="zone-1" style="left:70%; top:50%;">·</div>
-    <div class="node" id="zone-2" style="left:30%; top:100%;">🥕</div>
+    <div class="gate-badge" id="barrier-chain" style="left:50%; top:25%;">
+      <div class="lock-circle"><span class="lock-icon">🔒</span></div>
+      <div class="gate-label">identity</div>
+    </div>
+    <div class="gate-badge" id="barrier-wall" style="left:50%; top:75%;">
+      <div class="lock-circle"><span class="lock-icon">🔒</span></div>
+      <div class="gate-label">scope</div>
+    </div>
 
-    <!-- puertas -->
-    <div class="gate" id="barrier-chain" style="top:25%;">
-      <span class="lock-icon">🔒</span>
-      <span class="gate-label">identity</span>
-    </div>
-    <div class="gate" id="barrier-wall" style="top:75%;">
-      <span class="lock-icon">🔒</span>
-      <span class="gate-label">scope: carrot:action:eat</span>
-    </div>
+    <div class="node" id="carrot" style="left:30%; top:100%;">🥕</div>
+    <div id="bunny">🐇</div>
   </div>
 
   <p class="status-text" id="status-text" style="display:none"></p>
@@ -246,92 +282,145 @@
       document.getElementById('status-text').textContent = text;
     }
 
-    // --- Bunny vive en uno de tres nodos; "arrastrar" solo decide a cuál
-    // saltar. Las coordenadas de cada nodo ya están fijas en el CSS de
-    // arriba — aquí no se mide ni se calcula ninguna posición. ---
+    // --- Bunny se desliza por el camino ---
+    // El camino se define una sola vez, en fracciones del contenedor (los
+    // mismos puntos que dibuja el SVG de arriba). Bunny tiene un único
+    // número, `s`: cuántos píxeles ha recorrido. De `s` sale su posición.
+    const track = document.getElementById('track');
     const bunny = document.getElementById('bunny');
-    const zones = [
-      document.getElementById('zone-0'),
-      document.getElementById('zone-1'),
-      document.getElementById('zone-2'),
-    ];
     const chainGate = document.getElementById('barrier-chain');
     const wallGate = document.getElementById('barrier-wall');
+    const chainLine = document.getElementById('gate-line-chain');
+    const wallLine = document.getElementById('gate-line-wall');
 
-    let currentZone = 0;
+    const PATH = [[0.30, 0], [0.30, 0.25], [0.70, 0.25], [0.70, 0.75], [0.30, 0.75], [0.30, 1]];
+    const GATE_STOP = 44;   // px antes de la esquina donde Bunny se detiene frente a una puerta cerrada
+    const CARROT_STOP = 88; // px antes del final: queda junto a la zanahoria, no encima
+    const MAX_PUSH = 18;    // cuánto puede "empujar" contra una puerta cerrada antes de resistirse
+
     let chainOpen = false;
     let wallOpen = false;
+    let geo = null;         // medidas del contenedor y longitudes del camino
+    let s = 0;              // píxeles recorridos a lo largo del camino
 
-    function maxAllowedZone() {
-      if (!chainOpen) return 0;
-      if (!wallOpen) return 1;
-      return 2;
+    function measure() {
+      const W = track.clientWidth, H = track.clientHeight;
+      const pts = PATH.map(([x, y]) => [x * W, y * H]);
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) {
+        // los tramos son siempre horizontales o verticales: longitud = |dx| + |dy|
+        cum.push(cum[i - 1] + Math.abs(pts[i][0] - pts[i - 1][0]) + Math.abs(pts[i][1] - pts[i - 1][1]));
+      }
+      geo = { W, H, pts, cum, total: cum[cum.length - 1] };
     }
 
-    // Animación FLIP: antes de mover a Bunny de contenedor, se mide dónde
-    // estaba; después de moverlo, se calcula cuánto "saltó" y se anima
-    // desde ahí de regreso a su posición real — así el cambio de celda se
-    // ve como un deslizamiento suave, no un teletransporte.
-    function moveBunnyTo(zoneIndex) {
-      const before = bunny.getBoundingClientRect();
-      currentZone = zoneIndex;
-      zones[zoneIndex].appendChild(bunny);
-      const after = bunny.getBoundingClientRect();
-      const dx = before.left - after.left;
-      const dy = before.top - after.top;
-      bunny.style.transition = 'none';
-      bunny.style.transform = `translate(${dx}px, ${dy}px)`;
-      requestAnimationFrame(() => {
-        bunny.style.transition = 'transform .4s cubic-bezier(.3,.9,.4,1)';
-        bunny.style.transform = 'translate(0, 0)';
-      });
+    // Hasta dónde puede llegar Bunny ahora mismo, según qué puertas están abiertas.
+    function limit() {
+      if (!chainOpen) return geo.cum[1] - GATE_STOP;
+      if (!wallOpen) return geo.cum[3] - GATE_STOP;
+      return geo.total - CARROT_STOP;
     }
 
-    const STEP_THRESHOLD = 45; // más sensible al dedo que al mouse
+    function pointAt(dist) {
+      const { pts, cum, total } = geo;
+      dist = Math.max(0, Math.min(total, dist));
+      let i = 0;
+      while (i < cum.length - 2 && dist > cum[i + 1]) i++;
+      const len = cum[i + 1] - cum[i];
+      const t = len === 0 ? 0 : (dist - cum[i]) / len;
+      return [
+        pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t,
+        pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t,
+      ];
+    }
+
+    function renderBunny() {
+      const [x, y] = pointAt(s);
+      bunny.style.left = (x / geo.W * 100) + '%';
+      bunny.style.top = (y / geo.H * 100) + '%';
+    }
+
+    // Punto del camino más cercano al dedo, buscando solo cerca de donde
+    // Bunny ya está (así no salta a otro tramo del camino por accidente).
+    function nearestS(q, lo, hi) {
+      const { pts, cum } = geo;
+      let bestS = s, bestD = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = Math.max(cum[i], lo), b = Math.min(cum[i + 1], hi);
+        if (a > b) continue;
+        const dx = Math.sign(pts[i + 1][0] - pts[i][0]);
+        const dy = Math.sign(pts[i + 1][1] - pts[i][1]);
+        let t = (q[0] - pts[i][0]) * dx + (q[1] - pts[i][1]) * dy;
+        t = Math.max(a - cum[i], Math.min(b - cum[i], t));
+        const px = pts[i][0] + dx * t, py = pts[i][1] + dy * t;
+        const d = (q[0] - px) ** 2 + (q[1] - py) ** 2;
+        if (d < bestD) { bestD = d; bestS = cum[i] + t; }
+      }
+      return bestS;
+    }
+
+    function pointerInTrack(e) {
+      const r = track.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    }
+
     let dragging = false;
-    let dragAccum = 0;
-    let dragLastY = 0;
+    let grab = [0, 0]; // dónde agarró el dedo a Bunny, para que no "salte" al tocarlo
 
     bunny.addEventListener('pointerdown', (e) => {
+      measure();
       dragging = true;
       bunny.classList.add('dragging');
       bunny.setPointerCapture(e.pointerId);
-      dragLastY = e.clientY;
-      dragAccum = 0;
+      const q = pointerInTrack(e);
+      const [bx, by] = pointAt(s);
+      grab = [q[0] - bx, q[1] - by];
     });
+
     bunny.addEventListener('pointermove', (e) => {
       if (!dragging) return;
-      const delta = e.clientY - dragLastY;
-      dragLastY = e.clientY;
-      dragAccum += delta;
+      const q = pointerInTrack(e);
+      const target = [q[0] - grab[0], q[1] - grab[1]];
+      let next = nearestS(target, s - 160, s + 260);
 
-      if (dragAccum >= STEP_THRESHOLD) {
-        dragAccum = 0;
-        const next = currentZone + 1;
-        if (next <= maxAllowedZone()) moveBunnyTo(next);
-      } else if (dragAccum <= -STEP_THRESHOLD) {
-        dragAccum = 0;
-        const prev = currentZone - 1;
-        if (prev >= 0) moveBunnyTo(prev);
-      }
+      // Contra una puerta cerrada Bunny SÍ se mueve, pero cada vez con más
+      // resistencia: se deja empujar unos pocos píxeles y no pasa de ahí.
+      const lim = limit();
+      if (next > lim) next = lim + Math.min(MAX_PUSH, (next - lim) * 0.3);
+
+      s = Math.max(0, next);
+      renderBunny();
     });
+
     function endDrag() {
+      if (!dragging) return;
       dragging = false;
+      // Si estaba empujando contra una puerta, al soltarlo rebota a su lugar.
+      s = Math.min(s, limit());
       bunny.classList.remove('dragging');
-      dragAccum = 0;
+      renderBunny();
     }
     bunny.addEventListener('pointerup', endDrag);
     bunny.addEventListener('pointercancel', endDrag);
+
+    window.addEventListener('resize', () => {
+      if (!geo) return;
+      measure();
+      s = Math.min(s, limit());
+      renderBunny();
+    });
 
     function render({ chainDown, wallDown, title, narrative, credential, tech }) {
       chainOpen = chainDown;
       wallOpen = wallDown;
       if (chainDown) {
         chainGate.classList.add('open');
+        chainLine.classList.add('open');
         chainGate.querySelector('.lock-icon').textContent = '🔓';
       }
       if (wallDown) {
         wallGate.classList.add('open');
+        wallLine.classList.add('open');
         wallGate.querySelector('.lock-icon').textContent = '🔓';
       }
       document.getElementById('sheet-title').textContent = title;
@@ -354,6 +443,8 @@
       document.getElementById('loading').style.display = 'none';
       document.getElementById('track').style.display = 'block';
       document.getElementById('status-text').style.display = 'block';
+      measure();
+      renderBunny();
 
       if (!credParam) {
         setStatus('Who goes there? Bunny can\'t prove it yet.');
