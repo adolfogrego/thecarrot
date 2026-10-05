@@ -162,6 +162,7 @@
     margin-left: 19px;
   }
   .node.sharing .carrot-emoji { font-size: 1.7rem; transform: translateX(-19px); }
+  #bunny.gliding { transition: none; } /* el regreso lo dibuja el JS paso a paso, siguiendo el camino */
   #bunny.dragging {
     cursor: grabbing;
     transition: none; /* sigue al dedo sin retraso */
@@ -323,6 +324,8 @@
     let s = 0;              // píxeles recorridos a lo largo del camino
     let eating = false;     // la secuencia de llegada está en curso
     let ate = false;        // la zanahoria ya se comió (hasta recargar la página)
+    let gliding = false;    // Bunny está regresando al inicio por el camino
+    let expiresAtMs = null; // cuándo vence la credencial que abrió los candados (null = ninguna vigente)
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function measure() {
@@ -390,7 +393,7 @@
     let grab = [0, 0]; // dónde agarró el dedo a Bunny, para que no "salte" al tocarlo
 
     bunny.addEventListener('pointerdown', (e) => {
-      if (eating) return;
+      if (eating || gliding) return;
       measure();
       dragging = true;
       bunny.classList.add('dragging');
@@ -409,6 +412,17 @@
       // Contra una puerta cerrada Bunny SÍ se mueve, pero cada vez con más
       // resistencia: se deja empujar unos pocos píxeles y no pasa de ahí.
       const lim = limit();
+
+      // "Intentar cruzar un candado": al llegar al punto donde Bunny se detendría
+      // frente a una puerta, se revisa si la credencial sigue vigente. Es solo
+      // comparar dos fechas que ya están en memoria: sin red ni criptografía.
+      if (expiresAtMs !== null && !eating) {
+        const approaches = [geo.cum[1] - GATE_STOP, geo.cum[3] - GATE_STOP];
+        if (approaches.some((t) => s <= t && next > t) && Date.now() >= expiresAtMs) {
+          lapse(e.pointerId);
+          return;
+        }
+      }
 
       // Con las dos puertas abiertas, llegar al final del camino dispara la
       // llegada (con un poco de margen, para que no dependa de un píxel).
@@ -498,6 +512,56 @@
       }, 650);
     }
 
+    // --- Credencial vencida a mitad del recorrido: los candados se cierran de
+    // nuevo y Bunny regresa al inicio caminando por el mismo camino. ---
+    function glideTo(target, ms = 700) {
+      if (reduceMotion) {
+        bunny.classList.add('gliding');
+        s = target;
+        renderBunny();
+        requestAnimationFrame(() => bunny.classList.remove('gliding'));
+        return;
+      }
+      gliding = true;
+      bunny.classList.add('gliding');
+      const from = s, t0 = performance.now();
+      function frame(now) {
+        const t = Math.min(1, (now - t0) / ms);
+        s = from + (target - from) * (1 - Math.pow(1 - t, 3));
+        renderBunny();
+        if (t < 1) { requestAnimationFrame(frame); }
+        else { bunny.classList.remove('gliding'); gliding = false; }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function lapse(pointerId) {
+      const iso = new Date(expiresAtMs).toISOString();
+      const when = new Date(expiresAtMs).toLocaleTimeString();
+      expiresAtMs = null;
+
+      dragging = false;
+      bunny.classList.remove('dragging');
+      try { bunny.releasePointerCapture(pointerId); } catch (_) {}
+
+      chainOpen = false;
+      wallOpen = false;
+      [chainGate, wallGate].forEach((g) => {
+        g.classList.remove('open');
+        g.querySelector('.lock-icon').textContent = '🔒';
+      });
+      chainLine.classList.remove('open');
+      wallLine.classList.remove('open');
+
+      setStatus('This credential has expired — the gates shut again.');
+      document.getElementById('sheet-title').textContent = 'This credential has expired';
+      document.getElementById('sheet-narrative').textContent = `Bunny's credential only lasted until ${when}. When Bunny walked up to the next gate, that time had passed, so the gates shut again and Bunny was sent back to the start. Once a credential expires, nothing else about it is checked — Bunny needs a fresh one from thebunny.bar.`;
+      document.getElementById('sheet-tech').textContent = `Rejected — EXPIRED: credential has expired (expired at ${iso})`;
+
+      measure();
+      glideTo(0);
+    }
+
     window.addEventListener('resize', () => {
       if (!geo || eating) return;
       measure();
@@ -585,6 +649,22 @@
       setRegistryKeys(hexToBytes(identity.pq), hexToBytes(identity.ed));
       const result = verifyAgent(credential);
 
+      // El SDK revisa el vencimiento ANTES que la firma: con una credencial
+      // vencida no llega a verificarla, así que aquí no se afirma nada sobre
+      // si estaba bien firmada.
+      if (result.expired) {
+        const when = new Date(result.expiresAt).toLocaleTimeString();
+        setStatus('This credential has expired — the gates stay shut.');
+        render({
+          chainDown: false, wallDown: false,
+          title: 'This credential has expired',
+          narrative: `Bunny's credential only lasted until ${when}, and that time has passed. Once a credential expires, nothing else about it is checked, so it can't open anything — not even with the same link. Bunny needs a fresh one from thebunny.bar.`,
+          credential,
+          tech: `Rejected — ${result.reason} (expired at ${result.expiresAt})`,
+        });
+        return;
+      }
+
       if (!result.valid) {
         setStatus('Signature check failed — the gate stays shut.');
         render({
@@ -597,6 +677,7 @@
         return;
       }
 
+      expiresAtMs = new Date(result.expiresAt).getTime();
       const scopes = result.scopes || [];
       const canEat = scopes.includes('carrot:action:eat');
 

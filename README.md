@@ -17,6 +17,7 @@ Credentials are generated at **[thebunny.bar](https://thebunny.bar)**. The two s
 |---|---|---|
 | Nothing | closed | closed |
 | A credential that can't be read, has a bad signature, or whose issuer key can't be fetched | closed | closed |
+| A credential that has expired (thebunny.bar issues them with a 3-minute lifetime) | closed | closed |
 | A valid credential **without** `carrot:action:eat` | open | closed |
 | A valid credential **with** `carrot:action:eat` | open | open |
 
@@ -40,6 +41,8 @@ With a closed gate Bunny can still be pushed against it, but only a little, and 
 4. Gate 1 opens if the credential is valid. Gate 2 opens only if the credential also declares the scope this receiver requires.
 
 Verification itself is local: signatures, structure and expiry are checked in the browser. Altering a credential after it was signed, for example adding a scope, makes the signature fail.
+
+The signature is verified once, when the page loads. After that, whenever Bunny walks up to a gate, the page only compares the credential's expiry date with the clock. If it has passed, the gates shut again and Bunny goes back to the start. This mirrors how real systems treat expiry: a cheap check on each request, not a timer per credential.
 
 ## Relationship to ARIA
 
