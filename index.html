@@ -148,6 +148,18 @@
                 background-color .5s ease, box-shadow .5s ease, margin-left .5s ease;
   }
   .bunny-emoji, .carrot-emoji { display: inline-block; }
+
+  /* La credencial que Bunny trae consigo: chiquita, pegada a su ficha y
+     viaja con él. A color si fue aceptada; en gris si se rechazó o venció. */
+  .credential-badge {
+    position: absolute;
+    right: 1px; top: 1px;
+    font-size: 1.15rem; line-height: 1;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(31,58,42,0.25));
+    transition: opacity .4s ease, filter .4s ease;
+  }
+  .credential-badge.void { opacity: 0.45; filter: grayscale(1); }
   .carrot-emoji { transform-origin: 25% 75%; transition: font-size .5s ease, transform .5s ease; }
 
   /* Al llegar a la zanahoria, los dos caben juntos dentro del mismo círculo:
@@ -215,6 +227,8 @@
   }
   .sheet h3 { font-family: var(--serif); margin: 0 0 0.6rem; font-size: 1.15rem; padding-right: 2rem; }
   .sheet p.narrative { font-size: 0.95rem; line-height: 1.55; margin: 0 0 1.2rem; max-width: 52ch; }
+  .sheet .sheet-link { font-size: 0.9rem; margin: -0.5rem 0 1.2rem; }
+  .sheet .sheet-link a { color: var(--open); }
   .sheet .section-label { font-size: 0.75rem; color: var(--muted); margin: 1.1rem 0 0.3rem; }
   .sheet pre { font-family: var(--mono); font-size: 0.72rem; background: #F2EEE2; border: 1px solid var(--path); border-radius: 8px; padding: 0.85rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--ink); margin: 0; }
 </style>
@@ -243,7 +257,7 @@
     </div>
 
     <div class="node" id="carrot" style="left:30%; top:100%;"><span class="carrot-emoji" id="carrot-emoji">🥕</span></div>
-    <div id="bunny"><span class="bunny-emoji" id="bunny-emoji">🐇</span></div>
+    <div id="bunny"><span class="bunny-emoji" id="bunny-emoji">🐇</span><span class="credential-badge" id="credential-badge" style="display:none">🪪</span></div>
   </div>
 
   <p class="status-text" id="status-text" style="display:none"></p>
@@ -255,6 +269,7 @@
     <button class="close-btn" id="sheet-close">✕</button>
     <h3 id="sheet-title">Nothing has happened yet</h3>
     <p class="narrative" id="sheet-narrative"></p>
+    <p class="sheet-link" id="sheet-link" style="display:none"><span id="sheet-link-text"></span> <a href="https://thebunny.bar">thebunny.bar</a></p>
 
     <div id="sheet-credential-section" style="display:none">
       <div class="section-label">this is the credential</div>
@@ -487,6 +502,7 @@
       document.getElementById('sheet-title').textContent = 'Bunny ate the carrot';
       document.getElementById('sheet-narrative').textContent = 'Bunny\'s credential checked out and explicitly included permission to eat the carrot — so it made it all the way home and ate it. This is the credential:';
       document.getElementById('hint').style.display = 'none';
+      setSheetLink('Want another go? Get a new credential at');
     }
 
     function arrive(pointerId) {
@@ -553,6 +569,8 @@
       chainLine.classList.remove('open');
       wallLine.classList.remove('open');
 
+      showBadge(false);
+      setSheetLink('Get a fresh credential at');
       setStatus('This credential has expired — the gates shut again.');
       document.getElementById('sheet-title').textContent = 'This credential has expired';
       document.getElementById('sheet-narrative').textContent = `Bunny's credential only lasted until ${when}. When Bunny walked up to the next gate, that time had passed, so the gates shut again and Bunny was sent back to the start. Once a credential expires, nothing else about it is checked — Bunny needs a fresh one from thebunny.bar.`;
@@ -569,7 +587,26 @@
       renderBunny();
     });
 
-    function render({ chainDown, wallDown, title, narrative, credential, tech }) {
+    // Enlace de regreso a thebunny.bar dentro de la hoja (solo en los estados en
+    // que tiene sentido: sin credencial, vencida, o después de comer).
+    function setSheetLink(text) {
+      const p = document.getElementById('sheet-link');
+      if (text) {
+        document.getElementById('sheet-link-text').textContent = text;
+        p.style.display = 'block';
+      } else {
+        p.style.display = 'none';
+      }
+    }
+
+    // La credencial que viaja con Bunny: a color si fue aceptada, en gris si no.
+    const credBadge = document.getElementById('credential-badge');
+    function showBadge(accepted) {
+      credBadge.style.display = 'block';
+      credBadge.classList.toggle('void', !accepted);
+    }
+
+    function render({ chainDown, wallDown, title, narrative, credential, tech, link }) {
       chainOpen = chainDown;
       wallOpen = wallDown;
       if (chainDown) {
@@ -585,6 +622,7 @@
       document.getElementById('sheet-title').textContent = title;
       document.getElementById('sheet-narrative').textContent = narrative;
       document.getElementById('sheet-tech').textContent = tech;
+      setSheetLink(link);
       const credSection = document.getElementById('sheet-credential-section');
       if (credential) {
         credSection.style.display = 'block';
@@ -612,6 +650,7 @@
           title: 'Bunny has no identity',
           narrative: 'Bunny hasn\'t presented anything yet — no credential came along with it. With nothing to check, there\'s nothing to trust, so Bunny can\'t move past the first gate.',
           tech: 'No credential presented.',
+          link: 'Credentials are issued at',
         });
         return;
       }
@@ -629,6 +668,8 @@
         });
         return;
       }
+
+      showBadge(false); // Bunny ya trae una credencial; en gris hasta que se acepte
 
       let identity;
       try {
@@ -661,6 +702,7 @@
           narrative: `Bunny's credential only lasted until ${when}, and that time has passed. Once a credential expires, nothing else about it is checked, so it can't open anything — not even with the same link. Bunny needs a fresh one from thebunny.bar.`,
           credential,
           tech: `Rejected — ${result.reason} (expired at ${result.expiresAt})`,
+          link: 'Get a fresh credential at',
         });
         return;
       }
@@ -678,6 +720,7 @@
       }
 
       expiresAtMs = new Date(result.expiresAt).getTime();
+      showBadge(true);
       const scopes = result.scopes || [];
       const canEat = scopes.includes('carrot:action:eat');
 

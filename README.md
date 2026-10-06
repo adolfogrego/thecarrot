@@ -23,6 +23,8 @@ Credentials are generated at **[thebunny.bar](https://thebunny.bar)**. The two s
 
 With a closed gate Bunny can still be pushed against it, but only a little, and springs back when released.
 
+When Bunny presents a credential it carries a small ID card (🪪) beside it: in color if the credential was accepted, greyed out if it was rejected or has expired.
+
 ## How it works
 
 1. thebunny.bar signs an ARIA credential for Bunny in the browser. The credential is a W3C Verifiable Credential carrying a composite post-quantum signature (ML-DSA-65 + Ed25519). It is passed along in the link as `?credential=…`.
