@@ -2,18 +2,18 @@
 
 **A receiver of ARIA credentials.** Live at [thecarrot.rest](https://thecarrot.rest).
 
-thecarrot.rest is a small, playful site that checks an [ARIA](https://aria.bar) credential and decides what to allow. Bunny is stuck at the top of a path with two locked gates. A valid identity opens the first one. The right permission opens the second one, and Bunny can reach the carrot.
+thecarrot.rest is a small, playful site that checks an [ARIA](https://aria.bar) credential and decides what to allow. Bunny is stuck at the top of a path with two locked gates. A valid credential opens the first one. The right scope (permission to eat) opens the second one, and Bunny can reach the carrot.
 
 Credentials are generated at **[thebunny.bar](https://thebunny.bar)**. The two sites are deliberately independent: different domains, different hosts, no shared accounts, no shared session, no shared backend, and no call to the ARIA registry when a credential is verified. The only thing thecarrot.rest knows about thebunny.bar is where to find its public keys.
 
 ## Try it
 
 1. Open [thebunny.bar](https://thebunny.bar) and sign in as Bunny.
-2. Pick what Bunny should carry: no credential, identity only, identity plus permission to eat, or a delegated sub-Bunny.
+2. Pick what Bunny should carry: no credential, a credential without eat permission, a credential with eat permission, or a delegated sub-Bunny.
 3. Follow the link to thecarrot.rest and try to drag Bunny along the path.
 4. Tap **what's happening?** at the bottom for a plain-language explanation of the current state, the raw credential, and the technical verdict.
 
-| What Bunny presents | Gate 1 (identity) | Gate 2 (scope) |
+| What Bunny presents | Gate 1 (valid credential) | Gate 2 (Scope:eat) |
 |---|---|---|
 | Nothing | closed | closed |
 | A credential that can't be read, has a bad signature, or whose issuer key can't be fetched | closed | closed |
